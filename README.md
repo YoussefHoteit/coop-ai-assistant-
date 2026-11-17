@@ -21,11 +21,11 @@ Requires Node.js 22.9 or later. From the project directory:
     Copy-Item .env.example .env
     npm run dev
 
-Enter your API key in .env as OPENAI_API_KEY and set OPENAI_MODEL after choosing the model. OpenAI did not release a GPT‑4.5 mini API model. GPT‑5.4 mini (gpt-5.4-mini) is the proposed replacement. Restart the server and open http://127.0.0.1:4173. The key stays on the server and .env is ignored by Git. Without both settings, the demo uses built-in replies.
+Enter your API key in .env as OPENAI_API_KEY. The server uses GPT‑5.4 mini (gpt-5.4-mini) by default. Restart the server and open http://127.0.0.1:4173. The key stays on the server and .env is ignored by Git. The demo uses built-in replies until a key is configured.
 
 ## Deploy the demo
 
-Import this repository at https://vercel.com/new. The Vercel configuration serves the storefront from public and runs chat and catalog lookups as Node.js functions. Vercel assigns the deployment a vercel.app address. Deploy once without credentials to try the example journeys. To activate live responses, add OPENAI_API_KEY as a **Sensitive** environment variable in the Vercel project's settings, set OPENAI_MODEL, optionally set OPENAI_WEB_RESEARCH to 1, and redeploy. Use a restricted OpenAI project key and limit access to the demo when that key is enabled.
+Import this repository at https://vercel.com/new. The Vercel configuration serves the storefront from public and runs chat and catalog lookups as Node.js functions. Vercel assigns the deployment a vercel.app address. Deploy once without credentials to try the example journeys. To activate live responses, add OPENAI_API_KEY as a **Sensitive** environment variable in the Vercel project's settings, optionally set OPENAI_WEB_RESEARCH to 1, and redeploy. Use a restricted OpenAI project key and limit access to the demo when that key is enabled.
 
 Vercel Hobby is for personal or non-commercial use. Vercel Pro supports commercial projects and offers an eligible 14-day trial. Use vercel.com/pricing to verify the plan before hosting a sales demo.
 
