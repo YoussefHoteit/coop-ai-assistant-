@@ -1,6 +1,6 @@
 # Co-op AI Assistant
 
-A recreation of the Al Makhazen storefront for a private sales demonstration. Click **Ask Co-op** at the bottom right. The launcher, chat, recipe cards, source links, and shopping list are responsive.
+A recreation of the Al Makhazen storefront for a private sales demonstration. Click **Ask Co-op** at the bottom right. The launcher, chat, recipe cards, and shopping list are responsive.
 
 ## Try the demo
 
@@ -12,7 +12,7 @@ Open Al_Makhazen_Storefront_Demo.html in Chrome or Edge. The self-contained prev
 - “قديش في سعرات بالحمص لكل حصّة؟”
 - Click **Add ingredients to list**, then open the list icon in the chat or the basket in the storefront.
 
-The preview contains 15 public product records and 30 illustrative items. The public records have source links and unconfirmed availability. Sample prices and stock are illustrative. Generic recipe calorie estimates depend on ingredient weights and use reference values for generic foods.
+The preview contains 15 public product records and 30 illustrative items. Availability for public listings is unconfirmed. Sample prices and stock are illustrative. Generic recipe calorie estimates depend on ingredient weights and use reference values for generic foods.
 
 ## Start the project with OpenAI
 
@@ -25,11 +25,11 @@ Enter your API key in .env as OPENAI_API_KEY. The server uses GPT‑5.4 mini (gp
 
 ## Deploy the demo
 
-Import this repository at https://vercel.com/new. The Vercel configuration serves the storefront from public and runs chat and catalog lookups as Node.js functions. Vercel assigns the deployment a vercel.app address. Deploy once without credentials to try the example journeys. To activate live responses, add OPENAI_API_KEY as a **Sensitive** environment variable in the Vercel project's settings, optionally set OPENAI_WEB_RESEARCH to 1, and redeploy. Use a restricted OpenAI project key and limit access to the demo when that key is enabled.
+Import this repository at https://vercel.com/new. The Vercel configuration serves the storefront from public and runs chat and catalog lookups as Node.js functions. Vercel assigns the deployment a vercel.app address. Deploy once without credentials to try the example journeys. To activate live responses, add OPENAI_API_KEY as a **Secret** environment variable in the Vercel project's settings and redeploy. Use a restricted OpenAI project key and limit access to the demo when that key is enabled.
 
 Vercel Hobby is for personal or non-commercial use. Vercel Pro supports commercial projects and offers an eligible 14-day trial. Use vercel.com/pricing to verify the plan before hosting a sales demo.
 
-The model searches the selected catalog through a server-side tool. It creates recipes with servings and amounts, retrieves named products, and can show product descriptions or nutrition values when the inventory includes them. The app calculates recipe energy when all ingredients have usable weights and calorie values. OPENAI_WEB_RESEARCH=1 enables optional web research for general recipes and nutrition. Web results are used for the current answer and are not stored in a second database. Brand-specific prices, availability and labels come from the inventory.
+The model searches the selected catalog through a server-side tool. It creates recipes with servings and amounts, retrieves named products, and can show product descriptions or nutrition values when the inventory includes them. The app calculates recipe energy when all ingredients have usable weights and calorie values. The chat uses plain-text replies and recipe cards, with the inventory as its only lookup tool. Brand-specific prices, availability and labels come from the inventory.
 
 ## Import Co-op inventory
 

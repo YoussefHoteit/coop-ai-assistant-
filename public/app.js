@@ -10,10 +10,10 @@ const copy = {
     copy: 'Copy list', item: 'item', items: 'items', add: 'Add to list', added: 'Added to your shopping list.',
     already: 'Already on your shopping list.', onList: 'On your shopping list', all: 'Add ingredients to list', allProducts: 'Add all to list',
     available: 'Sample in stock', unavailable: 'Sample out of stock', inStock: 'In stock in snapshot', outOfStock: 'Out of stock in snapshot', unknown: 'Stock unconfirmed',
-    results: 'Catalog products', steps: 'How to make it', publicListing: 'Public listing', matchedSource: 'View product source',
-    noIngredient: 'No catalog match', energy: 'Estimated calories per serving', genericEnergy: 'Approximate, using generic ingredient values',
-    labelEnergy: 'Calculated from catalog nutrition labels', labelMissing: 'Nutrition label unavailable in this catalog',
-    details: 'Product details', ingredients: 'Ingredients', allergens: 'Allergens', dataSource: 'Nutrition reference', sources: 'Sources',
+    results: 'Catalog products', steps: 'How to make it',
+    noIngredient: 'No catalog match', energy: 'Estimated calories per serving', genericEnergy: 'Estimate',
+    labelMissing: 'Nutrition label unavailable in this catalog',
+    details: 'Product details', ingredients: 'Ingredients', allergens: 'Allergens',
     minutes: 'min', serves: 'servings', typing: 'Looking that up…', retry: 'I couldn’t load a reply. Please try again.',
     fallback: 'The AI service is unavailable. This answer uses the sample demo.', search: 'Search sample products…',
     noMatches: 'No sample products match your search.', copied: 'Shopping list copied.', close: 'Close', remove: 'Remove',
@@ -35,10 +35,10 @@ const copy = {
     copy: 'انسخ اللائحة', item: 'صنف', items: 'أصناف', add: 'ضيف عَ اللائحة', added: 'انضاف عَ لائحة التسوّق.',
     already: 'موجود عَ لائحة التسوّق.', onList: 'موجود عَ اللائحة', all: 'ضيف المكوّنات عَ اللائحة', allProducts: 'ضيف الكل عَ اللائحة',
     available: 'متوفّر بالتجربة', unavailable: 'مش متوفّر بالتجربة', inStock: 'متوفّر وقت التصدير', outOfStock: 'مش متوفّر وقت التصدير', unknown: 'التوفّر مش مؤكّد',
-    results: 'أصناف من الكتالوغ', steps: 'كيف تحضّرها', publicListing: 'من الموقع', matchedSource: 'شوف مصدر الصنف',
-    noIngredient: 'ما في صنف مطابق بالكتالوغ', energy: 'سعرات تقديرية لكل حصّة', genericEnergy: 'تقدير بحسب قيم غذائية عامة للمكوّنات',
-    labelEnergy: 'محسوبة من الملصقات الغذائية بالكتالوغ', labelMissing: 'الملصق الغذائي مش موجود بالكتالوغ',
-    details: 'تفاصيل الصنف', ingredients: 'المكوّنات', allergens: 'مسبّبات الحساسية', dataSource: 'مرجع غذائي', sources: 'المصادر',
+    results: 'أصناف من الكتالوغ', steps: 'كيف تحضّرها',
+    noIngredient: 'ما في صنف مطابق بالكتالوغ', energy: 'سعرات تقديرية لكل حصّة', genericEnergy: 'تقدير',
+    labelMissing: 'الملصق الغذائي مش موجود بالكتالوغ',
+    details: 'تفاصيل الصنف', ingredients: 'المكوّنات', allergens: 'مسبّبات الحساسية',
     minutes: 'دق', serves: 'حصص', typing: 'عم دوّرلك…', retry: 'ما قدرت جيب الجواب. جرّب مرّة تانية.',
     fallback: 'خدمة الذكاء الاصطناعي مش عم تردّ. هيدا الجواب من النسخة التجريبية.', search: 'دوّر عَ صنف تجريبي…',
     noMatches: 'ما لقيت أصناف بهالاسم.', copied: 'تمّ نسخ لائحة التسوّق.', close: 'سكّر', remove: 'شيل',
@@ -167,21 +167,7 @@ function productDetails(product) {
   const sample = product.sourceKind === 'sample';
   const status = product.available === null ? 'unknown' : product.available === true ? (sample ? 'available' : 'inStock')
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
-  return [product.size[lang], Number.isFinite(product.price) ? price(product.price) : '', getText(status),
-    product.sourceKind === 'public' ? getText('publicListing') : ''].filter(Boolean).join(' · ');
-}
-
-function referenceLink(url, label) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return null;
-  } catch { return null; }
-  const link = element('a', 'reference-link', label);
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  return link;
+  return [product.size[lang], Number.isFinite(product.price) ? price(product.price) : '', getText(status)].filter(Boolean).join(' · ');
 }
 
 function nutritionInfo(product, item) {
@@ -199,8 +185,6 @@ function nutritionInfo(product, item) {
   if (product.ingredients) details.append(element('small', '', getText('ingredients') + ' · ' + product.ingredients));
   if (product.allergens) details.append(element('small', '', getText('allergens') + ' · ' + product.allergens));
   if (!energy && !label && !product.ingredients && !product.allergens) details.append(element('small', '', getText('labelMissing')));
-  const link = referenceLink(energy?.sourceUrl || label?.sourceUrl, getText('dataSource'));
-  if (link) details.append(link);
   return details;
 }
 
@@ -214,10 +198,7 @@ function renderCard(card) {
   if (card.nutrition) {
     const nutrition = element('div', 'recipe-energy');
     nutrition.append(element('strong', '', localizedNumber(card.nutrition.kcalPerServing) + ' kcal'),
-      element('small', '', getText('energy')),
-      element('small', '', getText(card.nutrition.sourceKind === 'generic-estimate' ? 'genericEnergy' : 'labelEnergy')));
-    const reference = referenceLink(card.nutrition.sourceUrl, getText('dataSource'));
-    if (reference) nutrition.append(reference);
+      element('small', '', getText('energy')));
     intro.append(nutrition);
   }
   cardNode.append(intro);
@@ -240,8 +221,6 @@ function renderCard(card) {
     if (product.description?.[lang] && !recipe) details.append(element('small', '', product.description[lang]));
     const nutrition = nutritionInfo(product, item);
     if (nutrition) details.append(nutrition);
-    const source = referenceLink(product.sourceUrl, getText('matchedSource'));
-    if (source && !recipe) details.append(source);
     const add = button('add-button', getText('add') + ' ' + product.name[lang], 'plus', () => {
       if (!addToList([item])) return;
       add.replaceChildren(icon('check'));
@@ -292,9 +271,11 @@ function messageNode(message) {
     row.append(avatar);
   }
   const content = element('div', 'message-content');
-  const bubble = element('p', 'bubble', message.content);
-  bubble.dir = 'auto';
-  content.append(bubble);
+  if (message.content) {
+    const bubble = element('p', 'bubble', message.content);
+    bubble.dir = 'auto';
+    content.append(bubble);
+  }
 
   if (message.link) {
     const link = element('a', 'prompt', getText('website'));
@@ -306,15 +287,6 @@ function messageNode(message) {
     content.append(link);
   }
   if (message.card) content.append(renderCard(message.card));
-  if (message.sources?.length) {
-    const sources = element('div', 'reply-sources');
-    sources.append(element('strong', '', getText('sources')));
-    for (const { url, title } of message.sources) {
-      const link = referenceLink(url, title);
-      if (link) sources.append(link);
-    }
-    content.append(sources);
-  }
   if (message.suggestedRecipes?.length) {
     const row = element('div', 'recipe-suggestions');
     for (const id of message.suggestedRecipes) {
@@ -348,7 +320,16 @@ async function sendMessage(raw) {
   if (!content || activeRequest) return;
   const controller = new AbortController();
   activeRequest = controller;
-  const history = chat.filter(message => !message.error).slice(-8).map(({ role, content }) => ({ role, content }));
+  const history = chat.filter(message => !message.error).slice(-8).map(({ role, content, card }) => {
+    if (card?.kind !== 'recipe') return { role, content };
+    const recipeItems = card.items.map(item => {
+      const name = products.get(item.id)?.name?.[lang] || item.name;
+      return [name, item.amount].filter(Boolean).join(' ');
+    });
+    const recipe = [card.title + ' (' + card.servings + ' ' + getText('serves') + ')',
+      recipeItems.join(', '), ...card.steps].join('\n');
+    return { role, content: [recipe, content].filter(Boolean).join('\n') };
+  }).filter(message => message.content);
   chat.push({ role: 'user', content });
   byId('question').value = '';
   renderChat('latest');

@@ -130,6 +130,7 @@ svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width:
 .remove-button svg { width: 15px; height: 15px; }
 
 .result-card { margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.result-card:first-child { margin-top: 0; }
 .result-card h3 { margin: 0; font-size: 15px; }
 .result-card .card-intro { background: #f8faf5; padding: 11px 12px; }
 .result-card small { display: block; font-size: 11px; color: var(--muted); }
@@ -200,12 +201,10 @@ dialog::backdrop { background: #132e2266; }
 }
 @media (max-width: 345px) { .mode { display: none; } }
 
-.reference-link { display: inline-block; margin-top: 4px; color: #2d6345; font-size: 11px; text-underline-offset: 2px; }
 .nutrition-detail { margin-top: 4px; }
 .recipe-energy { margin-top: 8px; padding: 8px 9px; border-radius: 8px; background: #eaf2e6; }
 .recipe-energy strong { color: #1c4d32; font-size: 19px; line-height: 1.15; }
 .recipe-energy small { margin-top: 2px; }
-.reply-sources { display: grid; gap: 3px; margin-top: 8px; font-size: 12px; }
 .widget-control { display: none; }
 
 body.widget-mode { min-width: 0; background: #fbf7f2; }
