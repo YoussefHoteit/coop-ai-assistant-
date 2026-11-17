@@ -234,7 +234,7 @@ async function modelReply(env, input, history, lang) {
     } });
   }
   const conversation = [...history, { role: 'user', content: input }];
-  const model = env.OPENAI_MODEL.trim();
+  const model = env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini';
   const signal = AbortSignal.timeout(42000);
 
   for (let round = 0; round < 4; round++) {
@@ -306,7 +306,7 @@ async function modelReply(env, input, history, lang) {
 }
 
 function modelEnabled(env) {
-  return Boolean(env.OPENAI_API_KEY?.trim() && env.OPENAI_MODEL?.trim());
+  return Boolean(env.OPENAI_API_KEY?.trim());
 }
 
 function presentReply(reply, mode) {
