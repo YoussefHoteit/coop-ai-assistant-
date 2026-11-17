@@ -13,16 +13,15 @@
 <body>
   <header class="store-header">
     <div class="top-row">
-      <button class="header-icon" id="store-menu" aria-label="Browse departments" title="Browse departments">☰</button>
-      <a class="store-brand" href="/" aria-label="Al Makhazen home"><strong lang="ar">المخازن</strong><small>AL MAKHAZEN</small></a>
-      <button class="order-location" id="location" type="button"><span>ORDERING FROM</span><strong>Beirut</strong><i aria-hidden="true">▾</i></button>
-      <button class="basket-button" id="store-basket" aria-label="Open shopping list"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 2 9h14l2-9ZM7 10l5-6 5 6M10 13v3m4-3v3"/></svg><span id="basket-count">0</span></button>
+      <span class="header-icon" aria-hidden="true">☰</span>
+      <div class="store-brand"><strong lang="ar">المخازن</strong><small>AL MAKHAZEN</small></div>
+      <div class="order-location"><span>ORDERING FROM</span><strong id="branch-name">Beirut</strong><i aria-hidden="true">▾</i></div>
+      <button class="basket-button" id="store-basket" aria-label="Open shopping list" aria-haspopup="dialog" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 2 9h14l2-9ZM7 10l5-6 5 6M10 13v3m4-3v3"/></svg><span id="basket-count">0</span></button>
     </div>
-    <form class="search-row" id="store-search">
-      <label class="sr-only" for="store-query">Search items</label>
-      <input id="store-query" name="search" type="search" autocomplete="off" placeholder="search items" maxlength="120" required>
-      <button aria-label="Search products" type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg></button>
-    </form>
+    <div class="search-row" aria-hidden="true">
+      <span>search items</span>
+      <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15 15 6 6"/></svg>
+    </div>
   </header>
 
   <main>
@@ -30,27 +29,19 @@
       <div class="promo-copy" dir="rtl" lang="ar">
         <p>خضار وفاكهة طازجة</p>
         <h1>من البستان<br>للميزان</h1>
-        <button data-select="produce" type="button">تسوّق الخضار والفواكه <span aria-hidden="true">←</span></button>
+        <span class="promo-label">تسوّق الخضار والفواكه <span aria-hidden="true">←</span></span>
       </div>
     </section>
     <section class="departments" id="departments" aria-labelledby="departments-title">
-      <h2 class="sr-only" id="departments-title">Shop by department</h2>
+      <h2 class="sr-only" id="departments-title">Store departments</h2>
       <div class="category-grid" id="category-grid"></div>
-    </section>
-    <section class="store-results" id="store-results" aria-labelledby="results-heading" hidden>
-      <div class="results-heading">
-        <div><h2 id="results-heading"></h2><p id="results-note" aria-live="polite"></p></div>
-        <button class="outline" id="clear-results" type="button">Back to departments</button>
-      </div>
-      <div class="product-grid" id="store-products"></div>
     </section>
   </main>
   <footer class="store-footer">
     <span>Al Makhazen storefront demo</span>
-    <a href="https://almakhazen.me/" target="_blank" rel="noopener">Visit the live store ↗</a>
   </footer>
   <dialog id="store-dialog" aria-labelledby="store-dialog-title">
-    <header class="store-dialog-header"><h2 id="store-dialog-title"></h2><button class="outline" id="close-store-dialog" aria-label="Close" type="button">×</button></header>
+    <header class="store-dialog-header"><h2 id="store-dialog-title">Your shopping list</h2><button class="outline" id="close-store-dialog" aria-label="Close" type="button">×</button></header>
     <div id="store-dialog-content"></div>
   </dialog>
 </body>
