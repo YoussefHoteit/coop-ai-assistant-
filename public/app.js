@@ -4,20 +4,22 @@ const copy = {
     list: 'Shopping list', widget: 'Widget preview', website: 'Store website', pageTitle: 'Shopping Assistant',
     heroTitle: 'What’s on your\nshopping list?', heroIntro: 'Find groceries, get recipe ideas, and collect what you need in one list.',
     chatTitle: 'Ask Co-op', chatSubtitle: 'Products, recipes and nutrition', inputLabel: 'Your message',
-    input: 'Ask about a product or recipe…', send: 'Send message', sample: 'Preview catalog · public listings and illustrative items', approved: 'Inventory snapshot · confirm current availability with Co-op',
+    input: 'Ask about a product or recipe…', send: 'Send message', sample: 'Preview catalog · public listings and illustrative items',
+    screenshot: 'Co-op screenshot catalog · prices and stock as shown', approved: 'Inventory snapshot · confirm current availability with Co-op',
     welcome: 'Hi! I can help you find groceries, check product details, or plan a recipe and its shopping list.',
     demo: 'Demo mode', ai: 'AI mode', empty: 'Your list is empty', emptyInfo: 'Add products or recipe ingredients as you chat.',
     copy: 'Copy list', item: 'item', items: 'items', add: 'Add to list', added: 'Added to your shopping list.',
     already: 'Already on your shopping list.', onList: 'On your shopping list', all: 'Add ingredients to list', allProducts: 'Add all to list',
     available: 'Sample in stock', unavailable: 'Sample out of stock', inStock: 'In stock in snapshot', outOfStock: 'Out of stock in snapshot', unknown: 'Stock unconfirmed',
+    promotion: 'Promotion',
     results: 'Catalog products', steps: 'How to make it',
     noIngredient: 'No catalog match', energy: 'Estimated calories per serving', genericEnergy: 'Estimate',
     labelMissing: 'Nutrition label unavailable in this catalog',
     details: 'Product details', ingredients: 'Ingredients', allergens: 'Allergens',
     minutes: 'min', serves: 'servings', typing: 'Looking that up…', retry: 'I couldn’t load a reply. Please try again.',
-    fallback: 'The AI service is unavailable. This answer uses the sample demo.', search: 'Search sample products…',
-    noMatches: 'No sample products match your search.', copied: 'Shopping list copied.', close: 'Close', remove: 'Remove',
-    explore: 'Browse the sample products or ask me for a recipe.', loading: 'Loading the sample catalog…',
+    fallback: 'The AI service is unavailable. This answer uses the catalog.', search: 'Search products…',
+    noMatches: 'No products match your search.', copied: 'Shopping list copied.', close: 'Close', remove: 'Remove',
+    explore: 'Browse the products or ask me for a recipe.', loading: 'Loading the catalog…',
     prompts: [
       ['chef', 'Tabbouleh for 4', 'Give me a tabbouleh recipe for 4 people.'],
       ['search', 'Find labneh', 'Do you have labneh?'],
@@ -29,20 +31,22 @@ const copy = {
     list: 'لائحة التسوّق', widget: 'جرّب زر المحادثة', website: 'موقع المخازن', pageTitle: 'مساعد التسوّق',
     heroTitle: 'شو عَ لائحة\nالتسوّق اليوم؟', heroIntro: 'لاقِ الأغراض، خد أفكار للطبخ، وجمّع كل شي بدّك ياه بلائحة وحدة.',
     chatTitle: 'اسأل المخازن', chatSubtitle: 'أصناف، وصفات ومعلومات غذائية', inputLabel: 'رسالتك',
-    input: 'اسأل عن صنف أو وصفة…', send: 'ابعث الرسالة', sample: 'كتالوغ تجريبي فيه أصناف منشورة وأمثلة للعرض', approved: 'بيانات المخزون وقت التصدير. تأكّد من التوفّر مع المخازن.',
+    input: 'اسأل عن صنف أو وصفة…', send: 'ابعث الرسالة', sample: 'كتالوغ تجريبي فيه أصناف منشورة وأمثلة للعرض',
+    screenshot: 'كتالوغ المخازن بحسب الصور. الأسعار والتوفّر بحسب ما ظهر بالصور.', approved: 'بيانات المخزون وقت التصدير. تأكّد من التوفّر مع المخازن.',
     welcome: 'أهلا! فيني ساعدك تدوّر عَ صنف، تشوف تفاصيله، أو تحضّر وصفة مع لائحة الأغراض.',
     demo: 'نسخة تجريبية', ai: 'ذكاء اصطناعي', empty: 'اللائحة فاضية', emptyInfo: 'ضيف أصناف أو مكوّنات وصفة من المحادثة.',
     copy: 'انسخ اللائحة', item: 'صنف', items: 'أصناف', add: 'ضيف عَ اللائحة', added: 'انضاف عَ لائحة التسوّق.',
     already: 'موجود عَ لائحة التسوّق.', onList: 'موجود عَ اللائحة', all: 'ضيف المكوّنات عَ اللائحة', allProducts: 'ضيف الكل عَ اللائحة',
     available: 'متوفّر بالتجربة', unavailable: 'مش متوفّر بالتجربة', inStock: 'متوفّر وقت التصدير', outOfStock: 'مش متوفّر وقت التصدير', unknown: 'التوفّر مش مؤكّد',
+    promotion: 'عرض',
     results: 'أصناف من الكتالوغ', steps: 'كيف تحضّرها',
     noIngredient: 'ما في صنف مطابق بالكتالوغ', energy: 'سعرات تقديرية لكل حصّة', genericEnergy: 'تقدير',
     labelMissing: 'الملصق الغذائي مش موجود بالكتالوغ',
     details: 'تفاصيل الصنف', ingredients: 'المكوّنات', allergens: 'مسبّبات الحساسية',
     minutes: 'دق', serves: 'حصص', typing: 'عم دوّرلك…', retry: 'ما قدرت جيب الجواب. جرّب مرّة تانية.',
-    fallback: 'خدمة الذكاء الاصطناعي مش عم تردّ. هيدا الجواب من النسخة التجريبية.', search: 'دوّر عَ صنف تجريبي…',
+    fallback: 'خدمة الذكاء الاصطناعي مش عم تردّ. هيدا الجواب من الكتالوغ.', search: 'دوّر عَ صنف…',
     noMatches: 'ما لقيت أصناف بهالاسم.', copied: 'تمّ نسخ لائحة التسوّق.', close: 'سكّر', remove: 'شيل',
-    explore: 'تصفّح الأصناف التجريبية أو اسألني عن وصفة.', loading: 'عم حمّل الكتالوغ التجريبي…',
+    explore: 'تصفّح الأصناف أو اسألني عن وصفة.', loading: 'عم حمّل الكتالوغ…',
     prompts: [
       ['chef', 'تبولة لـ٤ أشخاص', 'عطيني وصفة تبولة لـ٤ أشخاص'],
       ['search', 'دوّر عَ اللبنة', 'عندكن لبنة؟'],
@@ -82,6 +86,7 @@ let toastTimeout;
 let dialogKind;
 
 const getText = key => copy[lang][key];
+const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
 const localizedNumber = number => new Intl.NumberFormat(lang === 'ar' ? 'ar-LB' : 'en-US').format(number);
 const price = amount => new Intl.NumberFormat(lang === 'ar' ? 'ar-LB' : 'en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
@@ -132,6 +137,7 @@ function setLanguage() {
   byId('list-toggle').setAttribute('aria-label', getText('list'));
   document.querySelector('.send').setAttribute('aria-label', getText('send'));
   byId('mode-label').textContent = getText(catalog?.mode === 'ai' ? 'ai' : 'demo');
+  document.querySelector('.chat-note').textContent = inventoryNote();
   renderPrompts();
   renderChat();
   renderList();
@@ -150,7 +156,7 @@ function loadCatalog() {
       for (const product of data.products) products.set(product.id, product);
       recipes = new Map(data.recipes.map(recipe => [recipe.id, recipe]));
       byId('mode-label').textContent = getText(data.mode === 'ai' ? 'ai' : 'demo');
-      document.querySelector('.chat-note').textContent = getText(data.inventoryMode === 'approved' ? 'approved' : 'sample');
+      document.querySelector('.chat-note').textContent = inventoryNote();
       renderList();
       return data;
     }).finally(() => { catalogRequest = null; });
@@ -167,7 +173,8 @@ function productDetails(product) {
   const sample = product.sourceKind === 'sample';
   const status = product.available === null ? 'unknown' : product.available === true ? (sample ? 'available' : 'inStock')
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
-  return [product.size[lang], Number.isFinite(product.price) ? price(product.price) : '', getText(status)].filter(Boolean).join(' · ');
+  return [product.size[lang], Number.isFinite(product.price) ? price(product.price) : '', getText(status),
+    product.promotion ? getText('promotion') : ''].filter(Boolean).join(' · ');
 }
 
 function nutritionInfo(product, item) {
@@ -218,7 +225,9 @@ function renderCard(card) {
     details.append(element('strong', '', product.name[lang] || product.name.en));
     const metadata = [item.amount, productDetails(product)].filter(Boolean).join(' · ');
     details.append(element('small', '', metadata));
-    if (product.description?.[lang] && !recipe) details.append(element('small', '', product.description[lang]));
+    if (product.description?.[lang] && (!recipe || product.sourceKind === 'screenshot')) {
+      details.append(element('small', '', product.description[lang]));
+    }
     const nutrition = nutritionInfo(product, item);
     if (nutrition) details.append(nutrition);
     const add = button('add-button', getText('add') + ' ' + product.name[lang], 'plus', () => {
@@ -515,7 +524,7 @@ async function openBrowse(kind) {
     clearTimeout(debounce);
     debounce = setTimeout(display, 170);
   });
-  content.replaceChildren(element('p', '', getText('sample')), search, results);
+  content.replaceChildren(element('p', '', inventoryNote()), search, results);
   display();
   search.focus();
 }

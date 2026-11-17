@@ -22,6 +22,7 @@ const entries = await Promise.all(Object.entries(staticFiles).map(async ([file, 
 }));
 const data = JSON.parse(await readFile(join(project, 'src', 'catalog.json'), 'utf8').then(value => value.replace(/^\uFEFF/, '')));
 data.publicProducts = JSON.parse(await readFile(join(project, 'src', 'public-inventory.json'), 'utf8'));
+data.screenshotProducts = JSON.parse(await readFile(join(project, 'src', 'screenshot-inventory.json'), 'utf8'));
 try {
   data.approved = JSON.parse(await readFile(join(project, 'src', 'approved-inventory.json'), 'utf8'));
 } catch (error) {

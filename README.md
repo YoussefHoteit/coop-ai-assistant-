@@ -12,7 +12,7 @@ Open Al_Makhazen_Storefront_Demo.html in Chrome or Edge. The self-contained prev
 - “قديش في سعرات بالحمص لكل حصّة؟”
 - Click **Add ingredients to list**, then open the list icon in the chat or the basket in the storefront.
 
-The preview contains 15 public product records and 30 illustrative items. Availability for public listings is unconfirmed. Sample prices and stock are illustrative. Generic recipe calorie estimates depend on ingredient weights and use reference values for generic foods.
+The storefront preview includes product listings transcribed from Co-op screenshots. Prices, promotions, and sold-out flags reflect what the screenshots show. The preview also includes earlier public records and illustrative products where the screenshots have no replacement. Generic recipe calorie estimates depend on ingredient weights and use reference values for generic foods.
 
 ## Start the project with OpenAI
 

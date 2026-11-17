@@ -15,7 +15,12 @@ const categories = [
     image: 'https://niafreshmarket.com/cdn/shop/collections/iStock-1084225624_5b6b8250-b42b-4bb6-85e1-768c98192c8a.jpg?v=1742248762' },
   { id: 'bakery', name: 'Bakery', icon: '🥖', color: '#f8eddf',
     image: 'https://bazaarandbite.com.au/cdn/shop/collections/assortment-baked-bread-scaled.webp?width=650' },
+  { id: 'pantry', name: 'Grocery Food', icon: '🛒', color: '#f7eee2' },
+  { id: 'frozen', name: 'Frozen Food', icon: '❄️', color: '#edf5fa' },
+  { id: 'snacks', name: 'Snack & Sweet', icon: '🍫', color: '#f9eef2' },
+  { id: 'beverages', name: 'Beverages', icon: '🧃', color: '#edf4e7' },
 ];
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -69,7 +74,7 @@ function catalogRequest(options = {}) {
   const params = new URLSearchParams();
   if (options.query) params.set('q', options.query);
   if (options.category) params.set('category', options.category);
-  params.set('limit', '24');
+  params.set('limit', '100');
   return fetch('/api/catalog?' + params, { signal: AbortSignal.timeout(8000) }).then(response => {
     if (!response.ok) throw new Error('Catalog unavailable');
     return response.json();
@@ -80,11 +85,16 @@ function productTile(product) {
   const title = product.name.en || product.name.ar;
   const tile = node('article', 'product');
   tile.append(node('h3', '', title));
-  const metadata = [product.size.en, product.sourceKind === 'public' ? 'Public listing' : product.sourceKind === 'import' ? 'Catalog data' : 'Illustrative product'].filter(Boolean);
+  const metadata = [product.subcategory, product.size.en,
+    Number.isFinite(product.price) ? usd.format(product.price) : '',
+    product.promotion ? 'Promotion' : '',
+    product.available === false && product.sourceKind !== 'sample' ? 'Sold out in snapshot' : '',
+    product.sourceKind === 'sample' ? 'Illustrative product' : '',
+  ].filter(Boolean);
   tile.append(node('p', '', metadata.join(' · ')));
   if (product.description?.en) tile.append(node('p', '', product.description.en));
   tile.append(action('Ask about this item', () => window.dispatchEvent(new CustomEvent('makhazen:open', {
-    detail: { prompt: 'Tell me about ' + title },
+    detail: { prompt: 'Tell me about ' + [title, product.size.en].filter(Boolean).join(' ') },
   }))));
   return tile;
 }

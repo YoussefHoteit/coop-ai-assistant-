@@ -31,9 +31,11 @@ function productEnergy(product, grams) {
     const basis = grams || label.basisGrams;
     return { kcal: Math.round(label.kcal * basis / label.basisGrams), grams: basis, sourceKind: 'label', sourceUrl: label.sourceUrl };
   }
-  if (product.sourceKind === 'sample' && Object.hasOwn(referenceEnergy, product.id)) {
+  const genericIngredient = product.sourceKind === 'sample' ? product.id
+    : product.sourceKind === 'screenshot' && product.category === 'produce' ? product.ingredient : null;
+  if (Object.hasOwn(referenceEnergy, genericIngredient)) {
     const basis = grams || 100;
-    return { kcal: Math.round(referenceEnergy[product.id] * basis / 100), grams: basis,
+    return { kcal: Math.round(referenceEnergy[genericIngredient] * basis / 100), grams: basis,
       sourceKind: 'generic-estimate', sourceUrl: foodDataCentral };
   }
   return null;
