@@ -21,7 +21,7 @@ Requires Node.js 22.9 or later. From the project directory:
     Copy-Item .env.example .env
     npm run dev
 
-Enter your API key in .env as OPENAI_API_KEY. The server uses GPT‑5.4 mini (gpt-5.4-mini) by default. Restart the server and open http://127.0.0.1:4173. The key stays on the server and .env is ignored by Git. The demo uses built-in replies until a key is configured.
+Enter your API key in .env as OPENAI_API_KEY. The server uses GPT-6 Luna (gpt-6-luna) by default. Restart the server and open http://127.0.0.1:4173. The key stays on the server and .env is ignored by Git. The demo uses built-in replies until a key is configured.
 
 ## Deploy the demo
 

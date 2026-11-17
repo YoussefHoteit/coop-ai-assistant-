@@ -399,13 +399,15 @@ function structuredReply(output) {
   return item?.text ? JSON.parse(item.text) : null;
 }
 
+const reasoningModel = /^gpt-[56](?:[.-]|$)/;
+
 async function shoppingDecision(env, model, input, history, recentLanguage, signal) {
   const output = await requestOpenAI(env, {
     model,
     instructions: scopeRules,
     input: JSON.stringify({ message: input, earlierMessages: history, recentLanguage }),
     max_output_tokens: 512,
-    ...(model.startsWith('gpt-5') && { reasoning: { effort: 'low' } }),
+    ...(reasoningModel.test(model) && { reasoning: { effort: 'low' } }),
     text: { format: { type: 'json_schema', name: 'shopping_scope', strict: true, schema: scopeSchema } },
   }, signal);
   const decision = structuredReply(output);
@@ -437,7 +439,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       max_output_tokens: 2400,
       tools: [inventoryTool],
       tool_choice: round === 3 ? 'none' : 'auto',
-      ...(model.startsWith('gpt-5') && {
+      ...(reasoningModel.test(model) && {
         reasoning: { effort: 'low' },
         include: ['reasoning.encrypted_content'],
       }),
@@ -498,6 +500,10 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
 
 function modelEnabled(env) {
   return Boolean(env.OPENAI_API_KEY?.trim());
+}
+
+function configuredModel(env) {
+  return env.OPENAI_MODEL?.trim() || 'gpt-6-luna';
 }
 
 function presentReply(reply, mode, language) {
@@ -585,7 +591,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
   let scopeAllowed = false;
   try {
-    const model = env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini';
+    const model = configuredModel(env);
     const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(42000)]);
     const decision = await shoppingDecision(env, model, input, history, recentLanguage, signal);
     if ((arabic && latin) || possibleArabizi) lang = decision.language;
@@ -634,7 +640,7 @@ export default {
       return json({ categories: catalogCategories, products: results.slice(0, limit), total: results.length,
         recipes: recipes.map(({ id, name, minutes }) => ({ id, name, minutes })), branch: DATA.approved?.branch ?? null,
         inventoryMode: DATA.approved ? 'approved' : screenshotProducts.length ? 'screenshot' : 'preview',
-        mode: modelEnabled(env) ? 'ai' : 'demo' });
+        mode: modelEnabled(env) ? 'ai' : 'demo', model: modelEnabled(env) ? configuredModel(env) : null });
     }
     const asset = ASSETS[pathname === '/' ? '/index.html' : pathname];
     if (!Object.hasOwn(ASSETS, pathname === '/' ? '/index.html' : pathname)) return new Response('Page not found', { status: 404 });
