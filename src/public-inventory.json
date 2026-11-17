@@ -1,0 +1,257 @@
+[
+  {
+    "id": "5651087",
+    "name": {
+      "en": "Bonlait Labneh 900 g",
+      "ar": "لبنة بونليه ٩٠٠ غ"
+    },
+    "category": "dairy",
+    "size": {
+      "en": "900 g",
+      "ar": "900 g"
+    },
+    "aliases": "labneh|labne|لبنة|لبنه|bonlait",
+    "sourceUrl": "https://almakhazen.me/products/5651087/bonlait-labneh-900gr",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "136478",
+    "name": {
+      "en": "Chickpeas 400 g",
+      "ar": "حمص حب ٤٠٠ غ"
+    },
+    "category": "pantry",
+    "size": {
+      "en": "400 g",
+      "ar": "400 g"
+    },
+    "aliases": "chickpea|chickpeas|حمص حب|حمص معلب",
+    "sourceUrl": "https://almakhazen.me/products/136478/chickpeas,-400g",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2012564",
+    "name": {
+      "en": "Taanayel High Protein Greek Yogurt Drink",
+      "ar": "مشروب لبن يوناني تاعنايل عالي البروتين"
+    },
+    "category": "dairy",
+    "size": {
+      "en": "330 mL",
+      "ar": "330 mL"
+    },
+    "aliases": "tanaayel|taanayel|greek yogurt|yogurt drink|protein drink",
+    "sourceUrl": "https://almakhazen.me/categories/2495/dairy-eggs",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2008215",
+    "name": {
+      "en": "Elle & Vire Mon Grec Plain",
+      "ar": "لبن يوناني سادة إيل إيه فير"
+    },
+    "category": "dairy",
+    "size": {
+      "en": "125 g",
+      "ar": "125 g"
+    },
+    "aliases": "mon grec|yogurt|greek yogurt|plain yogurt",
+    "sourceUrl": "https://almakhazen.me/categories/2495/dairy-eggs",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2000537",
+    "name": {
+      "en": "Elle & Vire Mon Grec Honey",
+      "ar": "لبن يوناني بالعسل إيل إيه فير"
+    },
+    "category": "dairy",
+    "size": {
+      "en": "125 g",
+      "ar": "125 g"
+    },
+    "aliases": "greek yogurt|honey yogurt",
+    "sourceUrl": "https://almakhazen.me/categories/2495/dairy-eggs",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2010705",
+    "name": {
+      "en": "Président UHT Cheesecake",
+      "ar": "بريزيدان خليط تشيز كيك"
+    },
+    "category": "dairy",
+    "size": {
+      "en": "1 L",
+      "ar": "1 L"
+    },
+    "aliases": "president|cheesecake",
+    "sourceUrl": "https://almakhazen.me/categories/2495/dairy-eggs",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2075129",
+    "name": {
+      "en": "Plein Soleil Tartina Rosemary",
+      "ar": "تارتينا إكليل الجبل بلان سولاي"
+    },
+    "category": "offers",
+    "size": {
+      "en": "8 pieces",
+      "ar": "8 pieces"
+    },
+    "aliases": "rosemary tartina|tartina",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2075135",
+    "name": {
+      "en": "Plein Soleil Tartina Garlic & Herbs",
+      "ar": "تارتينا توم وأعشاب بلان سولاي"
+    },
+    "category": "offers",
+    "size": {
+      "en": "8 pieces",
+      "ar": "8 pieces"
+    },
+    "aliases": "garlic tartina|tartina",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "3333333",
+    "name": {
+      "en": "Brazilian Minced Beef",
+      "ar": "لحمة بقر برازيلية مفرومة"
+    },
+    "category": "meat",
+    "size": {
+      "en": "1 kg",
+      "ar": "1 kg"
+    },
+    "aliases": "minced beef|ground beef|لحمة مفرومة",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "7060169P",
+    "name": {
+      "en": "Tanmia Chicken Tenders",
+      "ar": "تندرز دجاج تنمية"
+    },
+    "category": "meat",
+    "size": {
+      "en": "900 g",
+      "ar": "900 g"
+    },
+    "aliases": "tanmia|tenders|chicken tenders|دجاج",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "770025",
+    "name": {
+      "en": "Brazilian Beef Steak",
+      "ar": "ستيك بقر برازيلي"
+    },
+    "category": "meat",
+    "size": {
+      "en": "1 kg",
+      "ar": "1 kg"
+    },
+    "aliases": "steak|biftek|ستيك",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "1234566",
+    "name": {
+      "en": "Brazilian Beef Cubes",
+      "ar": "مكعبات لحمة بقر برازيلية"
+    },
+    "category": "meat",
+    "size": {
+      "en": "1 kg",
+      "ar": "1 kg"
+    },
+    "aliases": "beef cubes|cubed beef|مكعبات لحمة",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "8200316",
+    "name": {
+      "en": "Agrea Potato Bag",
+      "ar": "كيس بطاطا أغريا"
+    },
+    "category": "produce",
+    "size": {
+      "en": "5 kg",
+      "ar": "5 kg"
+    },
+    "aliases": "potato|potatoes|batata|بطاطا",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2332020",
+    "name": {
+      "en": "Grapeful Roasted Peanuts",
+      "ar": "فستق سوداني محمّص غريبفول"
+    },
+    "category": "pantry",
+    "size": {
+      "en": "40 g",
+      "ar": "40 g"
+    },
+    "aliases": "peanuts|roasted peanuts|فستق سوداني",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  },
+  {
+    "id": "2220641",
+    "name": {
+      "en": "Gandour Safari Caramel",
+      "ar": "غندور سفاري كراميل"
+    },
+    "category": "pantry",
+    "size": {
+      "en": "50 g",
+      "ar": "50 g"
+    },
+    "aliases": "gandour|safari caramel",
+    "sourceUrl": "https://almakhazen.me/categories/3143/",
+    "sourceKind": "public",
+    "price": null,
+    "available": null
+  }
+]

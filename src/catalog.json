@@ -1,0 +1,643 @@
+{
+  "categories": {
+    "produce": [
+      "Produce",
+      "خضرة وفواكه"
+    ],
+    "dairy": [
+      "Dairy & Eggs",
+      "ألبان وبيض"
+    ],
+    "bakery": [
+      "Bakery",
+      "مخبوزات"
+    ],
+    "pantry": [
+      "Grocery Food",
+      "مواد غذائية"
+    ],
+    "meat": [
+      "Meat & Poultry",
+      "لحوم ودجاج"
+    ]
+  },
+  "products": [
+    [
+      "parsley",
+      "Flat-leaf parsley",
+      "بقدونس",
+      "produce",
+      "1 bunch",
+      "ربطة",
+      0.65,
+      true,
+      "ba2dounis|ba2dounes|parsley|persil"
+    ],
+    [
+      "tomatoes",
+      "Fresh tomatoes",
+      "بندورة",
+      "produce",
+      "1 kg",
+      "١ كغ",
+      1.5,
+      true,
+      "tomato|tomatoes|tomates|طماطم|banadoura|banadora|bandora|banadura"
+    ],
+    [
+      "cucumbers",
+      "Lebanese cucumbers",
+      "خيار",
+      "produce",
+      "1 kg",
+      "١ كغ",
+      1.3,
+      true,
+      "cucumber|cucumbers|concombre|khyar"
+    ],
+    [
+      "mint",
+      "Fresh mint",
+      "نعنع",
+      "produce",
+      "1 bunch",
+      "ربطة",
+      0.55,
+      true,
+      "mint|menthe|نعناع|na3na3"
+    ],
+    [
+      "lemons",
+      "Fresh lemons",
+      "حامض",
+      "produce",
+      "1 kg",
+      "١ كغ",
+      1.65,
+      true,
+      "lemon|lemons|citron|ليمون|حامضة|7amod|hamod|hamed"
+    ],
+    [
+      "onions",
+      "Yellow onions",
+      "بصل",
+      "produce",
+      "1 kg",
+      "١ كغ",
+      1.1,
+      true,
+      "onion|onions|oignon|basal"
+    ],
+    [
+      "spring-onions",
+      "Spring onions",
+      "بصل أخضر",
+      "produce",
+      "1 bunch",
+      "ربطة",
+      0.95,
+      true,
+      "scallion|green onion|spring onion|spring onions|بصل اخضر"
+    ],
+    [
+      "garlic",
+      "Fresh garlic",
+      "ثوم",
+      "produce",
+      "250 g",
+      "٢٥٠ غ",
+      1.5,
+      true,
+      "garlic|ail|توم|toum|thoum"
+    ],
+    [
+      "lettuce",
+      "Romaine lettuce",
+      "خس",
+      "produce",
+      "1 head",
+      "حبة",
+      1,
+      true,
+      "lettuce|romaine|laitue|khass"
+    ],
+    [
+      "radishes",
+      "Red radishes",
+      "فجل",
+      "produce",
+      "1 bunch",
+      "ربطة",
+      0.85,
+      true,
+      "radish|radishes|radis|fejel"
+    ],
+    [
+      "potatoes",
+      "Potatoes",
+      "بطاطا",
+      "produce",
+      "1 kg",
+      "١ كغ",
+      1.3,
+      true,
+      "potato|potatoes|pomme de terre|batata"
+    ],
+    [
+      "bulgur",
+      "Fine bulgur",
+      "برغل ناعم",
+      "pantry",
+      "500 g",
+      "٥٠٠ غ",
+      2.25,
+      true,
+      "bulgur|burghul|boulgour|برغل|borghol"
+    ],
+    [
+      "olive-oil",
+      "Extra virgin olive oil",
+      "زيت زيتون بكر",
+      "pantry",
+      "500 mL",
+      "٥٠٠ مل",
+      6.8,
+      true,
+      "olive oil|huile d olive|زيت الزيتون|زيت زيتون|zeit zaytoun|zet zaytoun"
+    ],
+    [
+      "chickpeas",
+      "Canned chickpeas",
+      "حمص حب معلب",
+      "pantry",
+      "400 g",
+      "٤٠٠ غ",
+      1.25,
+      true,
+      "chickpeas|chickpea|pois chiches|حمص حب|حمص معلب|7ommos hab"
+    ],
+    [
+      "tahini",
+      "Sesame tahini",
+      "طحينة",
+      "pantry",
+      "400 g",
+      "٤٠٠ غ",
+      3.8,
+      true,
+      "tahini|tahine|t7ine|t7ini|tahina|طحينه"
+    ],
+    [
+      "lentils",
+      "Brown lentils",
+      "عدس بني",
+      "pantry",
+      "500 g",
+      "٥٠٠ غ",
+      1.85,
+      true,
+      "lentil|lentils|lentilles|عدس|3adas|adas"
+    ],
+    [
+      "rice",
+      "Long-grain rice",
+      "رز حبة طويلة",
+      "pantry",
+      "1 kg",
+      "١ كغ",
+      2.9,
+      true,
+      "rice|riz|أرز|رز|rezz|rez"
+    ],
+    [
+      "sumac",
+      "Ground sumac",
+      "سماق مطحون",
+      "pantry",
+      "80 g",
+      "٨٠ غ",
+      1.65,
+      true,
+      "sumac|سماق|summac"
+    ],
+    [
+      "molasses",
+      "Pomegranate molasses",
+      "دبس رمان",
+      "pantry",
+      "250 mL",
+      "٢٥٠ مل",
+      3.2,
+      true,
+      "pomegranate molasses|dabs remman|دبس الرمان"
+    ],
+    [
+      "salt",
+      "Fine sea salt",
+      "ملح",
+      "pantry",
+      "500 g",
+      "٥٠٠ غ",
+      0.85,
+      true,
+      "salt|sel|mele7"
+    ],
+    [
+      "pasta",
+      "Penne pasta",
+      "معكرونة بيني",
+      "pantry",
+      "500 g",
+      "٥٠٠ غ",
+      1.45,
+      true,
+      "pasta|penne|macaroni|pâtes|معكرونة|مكرونة"
+    ],
+    [
+      "pita",
+      "Lebanese pita bread",
+      "خبز لبناني",
+      "bakery",
+      "1 pack",
+      "كيس",
+      0.9,
+      true,
+      "pita|arabic bread|bread|pain|خبز|خبز عربي|khebez|khobz"
+    ],
+    [
+      "labneh",
+      "Plain labneh",
+      "لبنة سادة",
+      "dairy",
+      "500 g",
+      "٥٠٠ غ",
+      3.6,
+      true,
+      "labneh|labne|labni|لبنة|لبنه"
+    ],
+    [
+      "yogurt",
+      "Plain yogurt",
+      "لبن سادة",
+      "dairy",
+      "1 kg",
+      "١ كغ",
+      2.65,
+      true,
+      "yogurt|yoghurt|yaourt|لبن|laban|laben"
+    ],
+    [
+      "milk",
+      "Whole milk",
+      "حليب كامل الدسم",
+      "dairy",
+      "1 L",
+      "١ ليتر",
+      1.95,
+      true,
+      "milk|whole milk|lait|حليب|7alib|halib"
+    ],
+    [
+      "oat-milk",
+      "Unsweetened oat milk",
+      "حليب شوفان من دون سكر",
+      "dairy",
+      "1 L",
+      "١ ليتر",
+      3.55,
+      false,
+      "oat milk|lait d avoine|حليب شوفان|حليب الشوفان"
+    ],
+    [
+      "eggs",
+      "Fresh eggs",
+      "بيض طازج",
+      "dairy",
+      "12 eggs",
+      "١٢ بيضة",
+      3.1,
+      true,
+      "egg|eggs|oeufs|بيض|bayd|beid"
+    ],
+    [
+      "chicken",
+      "Boneless chicken breast",
+      "صدر دجاج بلا عضم",
+      "meat",
+      "500 g",
+      "٥٠٠ غ",
+      4.7,
+      true,
+      "chicken|chicken breast|poulet|دجاج|فروج|jaj|djeij|djej"
+    ],
+    [
+      "cumin",
+      "Ground cumin",
+      "كمون مطحون",
+      "pantry",
+      "70 g",
+      "٧٠ غ",
+      1.5,
+      true,
+      "cumin|كمون|kamoun"
+    ],
+    [
+      "paprika",
+      "Sweet paprika",
+      "بابريكا حلوة",
+      "pantry",
+      "75 g",
+      "٧٥ غ",
+      1.55,
+      true,
+      "paprika|بابريكا"
+    ]
+  ],
+  "recipes": [
+    [
+      "tabbouleh",
+      "Tabbouleh",
+      "تبولة",
+      "tabbouleh|tabboule|tabouleh|taboule|tabbouli|tabouli|taboulé|تبولة|تبوله|التبولة",
+      4,
+      25,
+      [
+        [
+          "parsley",
+          2,
+          "bunch"
+        ],
+        [
+          "tomatoes",
+          3,
+          "whole"
+        ],
+        [
+          "mint",
+          0.5,
+          "bunch"
+        ],
+        [
+          "spring-onions",
+          3,
+          "whole"
+        ],
+        [
+          "lemons",
+          2,
+          "whole"
+        ],
+        [
+          "bulgur",
+          45,
+          "g"
+        ],
+        [
+          "olive-oil",
+          3,
+          "tbsp"
+        ],
+        [
+          "salt",
+          0.5,
+          "tsp"
+        ]
+      ],
+      [
+        "Rinse the bulgur, soak it until tender, then drain.",
+        "Finely chop the parsley, mint and spring onions. Dice the tomatoes.",
+        "Toss with bulgur, lemon juice, olive oil and salt. Taste and serve."
+      ],
+      [
+        "اغسل البرغل وانقعو ليطرى، بعدين صفّيه.",
+        "فرم البقدونس والنعنع والبصل الأخضر ناعم، وقطّع البندورة مكعّبات.",
+        "اخلطهن مع البرغل وعصير الحامض وزيت الزيتون والملح وقدّم."
+      ]
+    ],
+    [
+      "fattoush",
+      "Fattoush",
+      "فتوش",
+      "fattoush|fatoush|fattouch|fatouch|فتوش|الفتوش",
+      4,
+      20,
+      [
+        [
+          "lettuce",
+          1,
+          "head"
+        ],
+        [
+          "tomatoes",
+          2,
+          "whole"
+        ],
+        [
+          "cucumbers",
+          2,
+          "whole"
+        ],
+        [
+          "radishes",
+          4,
+          "whole"
+        ],
+        [
+          "mint",
+          0.5,
+          "bunch"
+        ],
+        [
+          "pita",
+          2,
+          "whole"
+        ],
+        [
+          "lemons",
+          1,
+          "whole"
+        ],
+        [
+          "olive-oil",
+          3,
+          "tbsp"
+        ],
+        [
+          "sumac",
+          2,
+          "tsp"
+        ],
+        [
+          "molasses",
+          1,
+          "tbsp"
+        ]
+      ],
+      [
+        "Chop the vegetables and tear the mint.",
+        "Toast the pita and break it into pieces.",
+        "Whisk the lemon juice, oil, sumac and molasses. Toss everything just before serving."
+      ],
+      [
+        "قطّع الخضرة وفرّط ورق النعنع.",
+        "حمّص الخبز وكسّرو قطع.",
+        "اخلط عصير الحامض والزيت والسماق ودبس الرمان، وتبّل السلطة قبل التقديم."
+      ]
+    ],
+    [
+      "hummus",
+      "Hummus",
+      "حمص بطحينة",
+      "hummus|hommos|houmous|7ommos|7ummus|حمص|حمص بطحينة|الحمص",
+      4,
+      15,
+      [
+        [
+          "chickpeas",
+          1,
+          "can"
+        ],
+        [
+          "tahini",
+          3,
+          "tbsp"
+        ],
+        [
+          "lemons",
+          1,
+          "whole"
+        ],
+        [
+          "garlic",
+          1,
+          "clove"
+        ],
+        [
+          "olive-oil",
+          1,
+          "tbsp"
+        ],
+        [
+          "salt",
+          0.5,
+          "tsp"
+        ],
+        [
+          "pita",
+          2,
+          "whole"
+        ]
+      ],
+      [
+        "Drain the chickpeas and keep a little of the liquid.",
+        "Blend with tahini, lemon juice, garlic and salt. Thin with reserved liquid as needed.",
+        "Drizzle with olive oil and serve with pita."
+      ],
+      [
+        "صفّي الحمص وخبّي شوي من ميّتو.",
+        "اطحنو مع الطحينة والحامض والتوم والملح، وزيد من ميّ الحمص إذا لزم.",
+        "حطّ زيت زيتون عالوجه وقدّم مع الخبز."
+      ]
+    ],
+    [
+      "mujaddara",
+      "Mujaddara",
+      "مجدّرة",
+      "mujaddara|mujadara|moujadara|mjadara|mjaddara|مجدرة|المجدرة",
+      4,
+      45,
+      [
+        [
+          "lentils",
+          200,
+          "g"
+        ],
+        [
+          "rice",
+          100,
+          "g"
+        ],
+        [
+          "onions",
+          2,
+          "whole"
+        ],
+        [
+          "olive-oil",
+          3,
+          "tbsp"
+        ],
+        [
+          "cumin",
+          1,
+          "tsp"
+        ],
+        [
+          "salt",
+          0.5,
+          "tsp"
+        ]
+      ],
+      [
+        "Simmer the lentils in water until partly tender.",
+        "Add the rinsed rice, cumin and salt. Cook until the rice and lentils are tender, adding water as needed.",
+        "Brown sliced onions in olive oil and spoon over the mujaddara."
+      ],
+      [
+        "اسلق العدس بالمي لحتّى يبلّش يطرى.",
+        "زيد الرز المغسول والكمون والملح. اطبخهن ليطروا وزيد مي إذا لزم.",
+        "حمّر شرحات البصل بزيت الزيتون وحطّهن فوق المجدّرة."
+      ]
+    ],
+    [
+      "batata-harra",
+      "Batata harra",
+      "بطاطا حرّة",
+      "batata harra|batata 7arra|batata hara|بطاطا حرة|البطاطا الحرة",
+      4,
+      35,
+      [
+        [
+          "potatoes",
+          750,
+          "g"
+        ],
+        [
+          "garlic",
+          3,
+          "clove"
+        ],
+        [
+          "olive-oil",
+          3,
+          "tbsp"
+        ],
+        [
+          "lemons",
+          1,
+          "whole"
+        ],
+        [
+          "paprika",
+          1,
+          "tsp"
+        ],
+        [
+          "parsley",
+          0.5,
+          "bunch"
+        ]
+      ],
+      [
+        "Cut the potatoes into cubes and roast with olive oil until crisp.",
+        "Briefly sauté chopped garlic and paprika in a little oil.",
+        "Toss the hot potatoes with the garlic, parsley and lemon juice. Add chili flakes if you have some and want heat."
+      ],
+      [
+        "قطّع البطاطا مكعّبات واشويها مع زيت الزيتون لحتى تقرمش.",
+        "قلّي التوم المفروم والبابريكا شوي بالزيت.",
+        "اخلط البطاطا مع التوم والبقدونس والحامض. إذا عندك شطّة وبتحبّها حارّة، زيد شوي."
+      ]
+    ]
+  ]
+}

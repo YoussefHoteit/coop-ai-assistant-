@@ -1,0 +1,9 @@
+dist/
+.env
+.env.*
+!.env.example
+node_modules/
+.vercel/
+src/approved-inventory.json
+src/approved-inventory.json.*.tmp
+Al_Makhazen_Storefront_Demo.html

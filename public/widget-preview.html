@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Widget Preview · Al Makhazen</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    .preview { max-width: 1000px; margin-inline: auto; padding: 24px 20px; }
+    .preview nav { margin-block-end: 24px; }
+    .preview nav a { display: inline-block; color: var(--pine); font-weight: 750; text-decoration: none; }
+    .preview .hero { min-height: 300px; }
+    .preview .hero p { max-width: 265px; }
+    .preview .hero h1 { font-size: clamp(33px, 7vw, 62px); }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <nav><a id="back" href="/">← Shopping Assistant</a></nav>
+    <section class="hero" aria-labelledby="preview-title">
+      <div class="hero-photo" aria-hidden="true"></div>
+      <div class="hero-copy">
+        <h1 id="preview-title">Widget preview</h1>
+        <p id="preview-info">Open the chat button to try the assistant as customers would see it on the storefront.</p>
+      </div>
+    </section>
+  </main>
+  <script>
+    const lang = new URLSearchParams(location.search).get('lang') === 'ar' ? 'ar' : 'en';
+    if (lang === 'ar') {
+      document.documentElement.lang = 'ar';
+      document.documentElement.dir = 'rtl';
+      document.getElementById('back').textContent = 'مساعد التسوّق ←';
+      document.getElementById('back').href = '/?lang=ar';
+      document.getElementById('preview-title').textContent = 'جرّب زر المحادثة';
+      document.getElementById('preview-info').textContent = 'اكبس عَ زر المحادثة وجرّب المساعد متل ما رح يشوفوه الزباين عَ موقع المخازن.';
+    }
+    const script = document.createElement('script');
+    script.src = '/widget.js';
+    script.dataset.lang = lang;
+    document.body.append(script);
+  </script>
+</body>
+</html>
