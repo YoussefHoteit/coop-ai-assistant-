@@ -185,6 +185,18 @@ function priceReply(items, lang) {
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
 const namedPriceQuery = /^(?:how much (?:does|do|is|are)|what(?: s| is) the price|(?:the )?price of|قديش|بكم|كم سعر)(?: |$)/u;
 
+function lastSingleProduct(history) {
+  const assistant = history.findLast(message => message.role === 'assistant');
+  if (!assistant?.content.startsWith('{')) return null;
+  try {
+    const card = JSON.parse(assistant.content.split('\n', 1)[0]);
+    if (card?.kind !== 'products' || !Array.isArray(card.items) || card.items.length !== 1) return null;
+    return products.find(product => product.id === card.items[0]?.[0]);
+  } catch {
+    return null;
+  }
+}
+
 function demoReply(input, lang, context) {
   const t = messages[lang];
   const query = normalize(input).replace(/\.(?!\d)/g, ' ').replace(/ +/g, ' ').trim();
@@ -269,6 +281,7 @@ const rules = [
   'Answer directly in concise plain text. Keep the tone natural. Omit Markdown, decorative symbols, citations, URLs, source lists, and generic follow-up offers.',
   'Give stock or availability information only when the shopper asks for it. Keep a price answer to the price itself, with currency and any applicable price basis.',
   'Use search_inventory for named items, descriptions, label facts, stock, and every product recommendation. Public listing means the product was observed on the website. A null field is unknown. Sample items are illustrative.',
+  'If an Arabic or Arabizi product query gives no matching results, try the corresponding English name and common transliteration.',
   'Use only the retrieved catalog to state stock, price, product descriptions, and branded nutrition, ingredients or allergens. Put exact product facts in the product cards so the app renders them from the returned catalog records. Distinguish in-stock, out-of-stock and unconfirmed availability. Never use a sample record to answer a real product availability, price or nutrition question.',
   'Screenshot prices and availability describe the catalog snapshot. Do not speak of them as current, and keep any offer conditions or price basis.',
   'Keep every recipe ingredient in the recipe even if the catalog has no match. Never say all ingredients are available when any have unknown availability, no match or sold-out stock. Use cards to show availability per ingredient.',
@@ -482,10 +495,15 @@ async function chat(request, env) {
   const scopeReply = () => presentReply({ text: messages[lang].scope }, canUseModel ? 'ai' : 'demo', lang);
   if (directCodingRequest.test(input)) return scopeReply();
 
-  if (!canUseModel) return presentReply(demo(), 'demo', lang);
   const history = Array.isArray(body.history) ? body.history.slice(-100)
     .filter(item => item && ['assistant', 'user'].includes(item.role) && typeof item.content === 'string')
     .map(item => ({ role: item.role, content: item.content.slice(0, 3000) })) : [];
+  const asksLastPrice = barePriceFollowup.test(input.replace(/['’\p{M}]/gu, ''));
+  if (asksLastPrice) {
+    const lastProduct = lastSingleProduct(history);
+    if (lastProduct) return presentReply(priceReply([{ id: lastProduct.id }], lang), canUseModel ? 'ai' : 'demo', lang);
+  }
+  if (!canUseModel) return presentReply(demo(), 'demo', lang);
   let scopeAllowed = false;
   try {
     const model = env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini';
@@ -494,7 +512,7 @@ async function chat(request, env) {
     if ((arabic && latin) || possibleArabizi) lang = decision.language;
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
-    const priceOnly = decision.priceOnly || barePriceFollowup.test(input.replace(/['’\p{M}]/gu, ''));
+    const priceOnly = decision.priceOnly || asksLastPrice;
     return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal), 'ai', lang);
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 });
