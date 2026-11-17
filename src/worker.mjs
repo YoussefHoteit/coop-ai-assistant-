@@ -440,8 +440,9 @@ async function chat(request, env) {
 
   const input = typeof body?.message === 'string' ? body.message.trim() : '';
   if (!input || input.length > 600) return Response.json({ error: 'Enter a message up to 600 characters.' }, { status: 400 });
-  const arabic = /\p{Script=Arabic}/u.test(input);
+  const arabic = /(?=\p{L})\p{Script=Arabic}/u.test(input);
   const latin = /\p{Script=Latin}/u.test(input);
+  const possibleArabizi = /\b(?:baddi|bade|badi|shu|shou|kif|adde|ma3|fi|3and\w*)\b|\b[a-z]*[23789][a-z]+\b/i.test(input);
   const recentLanguage = body.lang === 'ar' ? 'ar' : 'en';
   let lang = arabic ? 'ar' : latin ? 'en' : recentLanguage;
   const demo = () => demoReply(input, lang, body.context);
@@ -458,7 +459,7 @@ async function chat(request, env) {
     const model = env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini';
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(42000)]);
     const decision = await shoppingDecision(env, model, input, history, recentLanguage, signal);
-    lang = arabic && !latin ? 'ar' : decision.language;
+    if ((arabic && latin) || possibleArabizi) lang = decision.language;
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
     return presentReply(await modelReply(env, model, input, history, lang, signal), 'ai', lang);

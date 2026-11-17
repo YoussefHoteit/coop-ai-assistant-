@@ -178,8 +178,16 @@ function productDetails(product, language = lang, amount = '') {
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
   const size = product.size[language];
   const sameSize = amount && size && quantityKey(amount) === quantityKey(size);
-  return [amount, sameSize ? '' : size, Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
+  return [amount, sameSize ? '' : formatPackSize(size, language), Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
     product.promotion ? getText('promotion', language) : ''].filter(Boolean).join(' · ');
+}
+
+function formatPackSize(size, language) {
+  if (!size || language !== 'ar') return size;
+  const units = { pieces: 'قطعة', piece: 'قطعة', pcs: 'قطعة', packs: 'عبوة', pack: 'عبوة',
+    g: 'غ', gr: 'غ', kg: 'كغ', ml: 'مل', cl: 'سل', l: 'ل', lb: 'رطل', oz: 'أونصة' };
+  return size.replace(/(\d+(?:\.\d+)?)\s*(pieces?|pcs|packs?|kg|gr?|ml|cl|l|lb|oz)\b/gi,
+    (_, number, unit) => localizedNumber(Number(number), language) + ' ' + units[unit.toLowerCase()]).replace(/,\s+/g, '، ');
 }
 
 function nutritionInfo(product, item, language) {
@@ -361,7 +369,7 @@ async function sendMessage(raw) {
   activeRequest = controller;
   const history = conversationHistory();
   const recentLanguage = chat.findLast(message => message.language)?.language ?? lang;
-  const language = /\p{Script=Arabic}/u.test(content) ? 'ar' : /\p{Script=Latin}/u.test(content) ? 'en' : recentLanguage;
+  const language = /(?=\p{L})\p{Script=Arabic}/u.test(content) ? 'ar' : /\p{Script=Latin}/u.test(content) ? 'en' : recentLanguage;
   chat.push({ role: 'user', content, language });
   saveChat();
   byId('question').value = '';
@@ -460,7 +468,7 @@ function saveList() {
 
 const quantityUnits = [
   [['pack', 'packs', 'packet', 'packets', 'عبوة', 'عبوات', 'باكيت'], ['pack', 'packs'], 'عبوة'],
-  [['', 'piece', 'pieces', 'pcs', 'حبة', 'حبات', 'حبّة', 'حبّات', 'عدد'], ['piece', 'pieces'], 'حبّة'],
+  [['', 'piece', 'pieces', 'pcs', 'حبة', 'حبات', 'حبّة', 'حبّات', 'عدد', 'قطعة', 'قطع'], ['piece', 'pieces'], 'حبّة'],
   [['g', 'gr', 'gram', 'grams', 'غ', 'غرام', 'غرامات', 'جرام'], ['g', 'g'], 'غ'],
   [['kg', 'kilo', 'kilos', 'kilogram', 'kilograms', 'كغ', 'كيلو', 'كيلوغرام'], ['kg', 'kg'], 'كغ'],
   [['ml', 'mls', 'مل', 'ملليلتر'], ['ml', 'ml'], 'مل'],
@@ -488,8 +496,10 @@ function parseQuantity(amount) {
 }
 
 function quantityKey(amount) {
-  const quantity = parseQuantity(amount);
-  return quantity ? quantity.count + ' ' + quantity.key : amount.toLowerCase().replace(/\s+/g, '');
+  return amount.split(/[,،]/).map(part => {
+    const quantity = parseQuantity(part);
+    return quantity ? quantity.count + ' ' + quantity.key : part.toLowerCase().replace(/\s+/g, '');
+  }).join(',');
 }
 
 function totalAmounts(values, language) {
