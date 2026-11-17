@@ -296,10 +296,9 @@ const rules = [
 ];
 
 const replySchema = {
-  type: 'object', additionalProperties: false, required: ['inScope', 'answer', 'recipe', 'items', 'showNutrition'],
+  type: 'object', additionalProperties: false, required: ['inScope', 'recipe', 'items', 'showNutrition', 'answer'],
   properties: {
     inScope: { type: 'boolean' },
-    answer: { type: 'string' },
     recipe: {
       type: ['object', 'null'], additionalProperties: false, required: ['title', 'servings', 'minutes', 'steps', 'revisesRecipe'],
       properties: {
@@ -314,6 +313,7 @@ const replySchema = {
       },
     },
     showNutrition: { type: 'boolean' },
+    answer: { type: 'string' },
   },
 };
 
@@ -343,15 +343,54 @@ function plainReplyText(value) {
     .trim();
 }
 
-async function requestOpenAI(env, body, signal) {
+async function requestOpenAI(env, body, signal, onText) {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + env.OPENAI_API_KEY.trim(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, store: false }),
+    body: JSON.stringify({ ...body, store: false, ...(onText && { stream: true }) }),
     signal,
   });
   if (!response.ok) throw new Error('OpenAI returned HTTP ' + response.status + '.');
-  return (await response.json()).output ?? [];
+  if (!onText) return (await response.json()).output ?? [];
+
+  let buffer = '';
+  let text = '';
+  let textItem;
+  for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+    const frames = (buffer + chunk).split(/\r?\n\r?\n/);
+    buffer = frames.pop();
+    for (const frame of frames) {
+      const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+      if (!data || data === '[DONE]') continue;
+      const event = JSON.parse(data);
+      if (event.type === 'response.completed') return event.response.output ?? [];
+      if (['error', 'response.failed', 'response.incomplete'].includes(event.type)) throw new Error('Incomplete OpenAI stream.');
+      if (event.type !== 'response.output_text.delta') continue;
+      textItem ??= event.item_id;
+      if (event.item_id !== textItem) continue;
+      text += event.delta;
+      onText(text);
+    }
+  }
+  throw new Error('The OpenAI stream ended without a completed reply.');
+}
+
+function previewAnswer(source, retrieved) {
+  // The answer comes last so scope and recipe coverage are known before any prose is sent.
+  const field = /,\s*"answer"\s*:\s*"/.exec(source);
+  if (!field) return '';
+  const { inScope, recipe, items } = JSON.parse(source.slice(0, field.index) + '}');
+  if (inScope !== true || !Array.isArray(items) || (recipe && items.some(item =>
+    !retrieved.has(item.id) || productsById.get(item.id)?.available !== true))) return '';
+
+  const value = source.slice(field.index + field[0].length);
+  const encoded = /^(?:[^"\\]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*/.exec(value)[0];
+  const text = JSON.parse('"' + encoded + '"');
+  const complete = value[encoded.length] === '"';
+  // Hold unfinished words and leave markup, links and references to the final sanitizer.
+  const prefix = complete ? text : text.replace(/\S+$/u, '');
+  if (/[\[\]*`~#_<>【】]|https?:|www\.|^\s*(?:sources?|references?|citations?|المصادر|المراجع)\s*:/im.test(prefix)) return '';
+  return plainReplyText(prefix).slice(0, 4000);
 }
 
 function structuredReply(output) {
@@ -376,12 +415,20 @@ async function shoppingDecision(env, model, input, history, recentLanguage, sign
   return decision;
 }
 
-async function modelReply(env, model, input, history, lang, priceOnly, signal) {
+async function modelReply(env, model, input, history, lang, priceOnly, signal, publish) {
   const retrieved = new Set();
   const conversation = [{ role: 'user', content: JSON.stringify({ earlierMessages: history, message: input }) }];
   const priceInstructions = priceOnly ? '\nThis is a price-only request. Look up the exact product or products being asked about and return their IDs in items. Leave answer empty because the app displays the listed price directly.' : '';
 
   for (let round = 0; round < 4; round++) {
+    let shown = '';
+    const preview = publish && !priceOnly && (source => {
+      const text = previewAnswer(source, retrieved);
+      if (text.length > shown.length && text.startsWith(shown)) {
+        publish(text.slice(shown.length), lang);
+        shown = text;
+      }
+    });
     const output = await requestOpenAI(env, {
       model,
       instructions: rules.join('\n') + priceInstructions + '\nWrite this reply in ' + (lang === 'ar' ? 'Arabic' : 'English') +
@@ -395,9 +442,10 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal) {
         include: ['reasoning.encrypted_content'],
       }),
       text: { format: { type: 'json_schema', name: 'shopping_reply', strict: true, schema: replySchema } },
-    }, signal);
+    }, signal, preview);
     const calls = output.filter(item => item.type === 'function_call');
     if (calls.length && round < 3) {
+      if (shown) publish('', lang);
       conversation.push(...output);
       for (const call of calls) {
         let matches = [];
@@ -454,7 +502,7 @@ function modelEnabled(env) {
 
 function presentReply(reply, mode, language) {
   const ids = new Set(reply.card?.items.map(item => item.id).filter(Boolean));
-  return json({ ...reply, mode, language, products: [...ids].map(id => productsById.get(id)).filter(Boolean) });
+  return { ...reply, mode, language, products: [...ids].map(id => productsById.get(id)).filter(Boolean) };
 }
 
 async function chat(request, env) {
@@ -485,6 +533,37 @@ async function chat(request, env) {
 
   const input = typeof body?.message === 'string' ? body.message.trim() : '';
   if (!input || input.length > 600) return Response.json({ error: 'Enter a message up to 600 characters.' }, { status: 400 });
+  if (request.headers.get('accept')?.includes('application/x-ndjson')) {
+    return streamReply(request.signal, (signal, publish) => resolveChat(input, body, env, signal, publish));
+  }
+  const reply = await resolveChat(input, body, env, request.signal);
+  return reply ? json(reply) : new Response(null, { status: 499 });
+}
+
+function streamReply(requestSignal, resolve) {
+  const cancelled = new AbortController();
+  const signal = AbortSignal.any([requestSignal, cancelled.signal]);
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const send = event => {
+        if (!signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
+      };
+      resolve(signal, (delta, language) => send({ type: 'text', delta, language }))
+        .then(reply => { if (reply) send({ type: 'result', reply }); })
+        .catch(() => send({ type: 'error' }))
+        .finally(() => { if (!cancelled.signal.aborted) controller.close(); });
+    },
+    cancel() { cancelled.abort(); },
+  });
+  return new Response(stream, { headers: {
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-store, no-transform',
+    'X-Content-Type-Options': 'nosniff',
+  } });
+}
+
+async function resolveChat(input, body, env, requestSignal, publish) {
   const arabic = /(?=\p{L})\p{Script=Arabic}/u.test(input);
   const latin = /\p{Script=Latin}/u.test(input);
   const possibleArabizi = /\b(?:baddi|bade|badi|shu|shou|kif|adde|ma3|fi|3and\w*)\b|\b[a-z]*[23789][a-z]+\b/i.test(input);
@@ -507,15 +586,15 @@ async function chat(request, env) {
   let scopeAllowed = false;
   try {
     const model = env.OPENAI_MODEL?.trim() || 'gpt-5.4-mini';
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(42000)]);
+    const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(42000)]);
     const decision = await shoppingDecision(env, model, input, history, recentLanguage, signal);
     if ((arabic && latin) || possibleArabizi) lang = decision.language;
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
     const priceOnly = decision.priceOnly || asksLastPrice;
-    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal), 'ai', lang);
+    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish), 'ai', lang);
   } catch (error) {
-    if (request.signal.aborted) return new Response(null, { status: 499 });
+    if (requestSignal.aborted) return null;
     if (error instanceof Error && /^OpenAI returned HTTP \d{3}\.$/.test(error.message)) {
       console.warn(error.message);
     } else {

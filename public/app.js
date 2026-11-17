@@ -85,6 +85,7 @@ const products = new Map(chat.flatMap(message => (message.products ?? []).map(pr
 let recipes = new Map();
 let context = savedChat?.context ?? null;
 let activeRequest;
+let replyPreview;
 let toastTimeout;
 let dialogKind;
 
@@ -324,7 +325,9 @@ function renderChat(scroll = 'preserve') {
   const nodes = [initial, ...chat].map(messageNode);
   if (activeRequest) {
     const language = chat.at(-1)?.language ?? lang;
-    nodes.push(messageNode({ role: 'assistant', content: getText('typing', language), language, typing: true }));
+    const pending = messageNode(replyPreview ?? { role: 'assistant', content: getText('typing', language), language, typing: true });
+    pending.setAttribute('aria-hidden', 'true');
+    nodes.push(pending);
   }
   region.replaceChildren(...nodes);
   if (scroll === 'latest' && chat.length) {
@@ -333,6 +336,81 @@ function renderChat(scroll = 'preserve') {
     region.scrollTop = oldPosition;
   }
   document.querySelector('.send').disabled = Boolean(activeRequest);
+}
+
+function showReplyPreview(text, language) {
+  replyPreview = { role: 'assistant', content: text || getText('typing', language), language, typing: !text };
+  const region = byId('messages');
+  const follow = region.scrollHeight - region.scrollTop - region.clientHeight < 48;
+  const row = region.lastElementChild;
+  const bubble = row.querySelector('.bubble');
+  row.classList.toggle('typing', replyPreview.typing);
+  bubble.lang = language;
+  bubble.textContent = replyPreview.content;
+  if (follow) region.scrollTop = region.scrollHeight;
+}
+
+function replyWriter(signal) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let target = '';
+  let visible = '';
+  let language;
+  let timer;
+  let completion = Promise.resolve();
+  let resolveCompletion;
+
+  function settle() {
+    clearTimeout(timer);
+    timer = undefined;
+    resolveCompletion?.();
+    resolveCompletion = undefined;
+  }
+
+  function draw() {
+    if (!target.startsWith(visible)) visible = '';
+    const left = Array.from(target.slice(visible.length));
+    const count = reducedMotion || document.hidden ? left.length : Math.max(1, Math.ceil(left.length / 16));
+    visible += left.slice(0, count).join('');
+    showReplyPreview(visible, language);
+    if (visible === target) settle();
+    else timer = setTimeout(draw, 20);
+  }
+
+  signal.addEventListener('abort', settle, { once: true });
+  return (text, nextLanguage) => {
+    if (signal.aborted) return completion;
+    target = text;
+    language = nextLanguage;
+    if (timer === undefined) {
+      completion = new Promise(resolve => { resolveCompletion = resolve; });
+      draw();
+    }
+    return completion;
+  };
+}
+
+async function readChatReply(response, onText) {
+  if (!response.headers.get('content-type')?.includes('application/x-ndjson')) return response.json();
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error('Chat stream ended before the reply was complete.');
+      const lines = (buffer + value).split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === 'result') return event.reply;
+        if (event.type === 'error') throw new Error('Chat stream failed.');
+        if (event.type === 'text') onText(event.delta, event.language);
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 function saveChat() {
@@ -376,14 +454,21 @@ async function sendMessage(raw) {
   renderChat('latest');
 
   try {
+    const writeReply = replyWriter(controller.signal);
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(48500)]);
     const response = await fetch('/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify({ message: content, history, lang: recentLanguage, context }),
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(48500)]),
+      signal,
     });
     if (!response.ok) throw new Error('Chat unavailable');
-    const reply = await response.json();
-    await loadCatalog().catch(() => {});
+    let partial = '';
+    const reply = await readChatReply(response, (delta, replyLanguage) => {
+      partial = delta ? partial + delta : '';
+      writeReply(partial, replyLanguage);
+    });
+    if (activeRequest !== controller) return;
+    await Promise.all([writeReply(reply.text || '', reply.language ?? language), loadCatalog().catch(() => {})]);
     if (activeRequest !== controller) return;
     for (const product of reply.products ?? []) products.set(product.id, product);
     if (reply.card) {
@@ -395,10 +480,12 @@ async function sendMessage(raw) {
     context = reply.context ?? context;
   } catch {
     if (activeRequest !== controller) return;
+    controller.abort();
     chat.push({ role: 'assistant', content: getText('retry', language), language, error: true });
   } finally {
     if (activeRequest === controller) {
       activeRequest = null;
+      replyPreview = null;
       saveChat();
       renderChat('latest');
     }
@@ -408,6 +495,7 @@ async function sendMessage(raw) {
 function resetChat() {
   activeRequest?.abort();
   activeRequest = null;
+  replyPreview = null;
   chat.length = 0;
   context = null;
   saveChat();
