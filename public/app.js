@@ -13,7 +13,7 @@ const copy = {
     available: 'Sample in stock', unavailable: 'Sample out of stock', inStock: 'In stock in snapshot', outOfStock: 'Out of stock in snapshot', unknown: 'Stock unconfirmed',
     promotion: 'Promotion',
     results: 'Catalog products', steps: 'How to make it',
-    noIngredient: 'No catalog match', energy: 'Estimated calories per serving', genericEnergy: 'Estimate',
+    noIngredient: 'Availability unconfirmed', energy: 'Estimated calories per serving', genericEnergy: 'Estimate',
     labelMissing: 'Nutrition label unavailable in this catalog',
     details: 'Product details', ingredients: 'Ingredients', allergens: 'Allergens',
     minutes: 'min', serves: 'servings', typing: 'Looking that up…', retry: 'I couldn’t load a reply. Please try again.',
@@ -40,7 +40,7 @@ const copy = {
     available: 'متوفّر بالتجربة', unavailable: 'مش متوفّر بالتجربة', inStock: 'متوفّر وقت التصدير', outOfStock: 'مش متوفّر وقت التصدير', unknown: 'التوفّر مش مؤكّد',
     promotion: 'عرض',
     results: 'أصناف من الكتالوغ', steps: 'كيف تحضّرها',
-    noIngredient: 'ما في صنف مطابق بالكتالوغ', energy: 'سعرات تقديرية لكل حصّة', genericEnergy: 'تقدير',
+    noIngredient: 'التوفّر مش مؤكّد', energy: 'سعرات تقديرية لكل حصّة', genericEnergy: 'تقدير',
     labelMissing: 'الملصق الغذائي مش موجود بالكتالوغ',
     details: 'تفاصيل الصنف', ingredients: 'المكوّنات', allergens: 'مسبّبات الحساسية',
     minutes: 'دق', serves: 'حصص', typing: 'عم دوّرلك…', retry: 'ما قدرت جيب الجواب. جرّب مرّة تانية.',
@@ -75,20 +75,23 @@ if (widgetMode) document.body.classList.add('widget-mode');
 
 const list = new Map(Array.isArray(savedList) ? savedList.filter(item => item && typeof item.id === 'string' &&
   typeof item.amount === 'string').slice(0, 60).map(item => [item.id, item]) : []);
-const chat = [];
+const chatKey = 'makhazen-chat-v1-' + (widgetMode ? 'widget' : 'standalone');
+let savedChat;
+try { savedChat = JSON.parse(sessionStorage.getItem(chatKey)); } catch { /* Chat still works without storage. */ }
+const chat = Array.isArray(savedChat?.messages) ? savedChat.messages : [];
 let catalog;
 let catalogRequest;
-let products = new Map();
+const products = new Map(chat.flatMap(message => (message.products ?? []).map(product => [product.id, product])));
 let recipes = new Map();
-let context = null;
+let context = savedChat?.context ?? null;
 let activeRequest;
 let toastTimeout;
 let dialogKind;
 
-const getText = key => copy[lang][key];
+const getText = (key, language = lang) => copy[language][key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
-const localizedNumber = number => new Intl.NumberFormat(lang === 'ar' ? 'ar-LB' : 'en-US').format(number);
-const price = amount => new Intl.NumberFormat(lang === 'ar' ? 'ar-LB' : 'en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const localizedNumber = (number, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US').format(number);
+const price = (amount, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
 function element(tag, className = '', text) {
   const node = document.createElement(tag);
@@ -169,43 +172,52 @@ function renderPrompts() {
   byId('prompts').replaceChildren(...prompts);
 }
 
-function productDetails(product) {
+function productDetails(product, language = lang, amount = '') {
   const sample = product.sourceKind === 'sample';
   const status = product.available === null ? 'unknown' : product.available === true ? (sample ? 'available' : 'inStock')
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
-  return [product.size[lang], Number.isFinite(product.price) ? price(product.price) : '', getText(status),
-    product.promotion ? getText('promotion') : ''].filter(Boolean).join(' · ');
+  const size = product.size[language];
+  const sameSize = amount && size && quantityKey(amount) === quantityKey(size);
+  return [amount, sameSize ? '' : size, Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
+    product.promotion ? getText('promotion', language) : ''].filter(Boolean).join(' · ');
 }
 
-function nutritionInfo(product, item) {
+function nutritionInfo(product, item, language) {
   if (!item.details) return null;
   const details = element('div', 'nutrition-detail');
   const label = product.nutrition;
   const energy = item.energy;
-  if (energy) details.append(element('small', '', localizedNumber(energy.kcal) + ' kcal / ' + localizedNumber(energy.grams) + ' g' +
-    (energy.sourceKind === 'generic-estimate' ? ' · ' + getText('genericEnergy') : '')));
+  const number = value => localizedNumber(value, language);
+  const grams = language === 'ar' ? ' غ' : ' g';
+  const calories = language === 'ar' ? ' سعرة' : ' kcal';
+  if (energy) details.append(element('small', '', number(energy.kcal) + calories + ' / ' + number(energy.grams) + grams +
+    (energy.sourceKind === 'generic-estimate' ? ' · ' + getText('genericEnergy', language) : '')));
   if (label?.basisGrams) {
     const facts = [['protein', 'Protein', 'بروتين'], ['carbs', 'Carbs', 'نشويات'], ['fat', 'Fat', 'دهون']]
-      .filter(([key]) => Number.isFinite(label[key])).map(([key, en, ar]) => (lang === 'ar' ? ar : en) + ' ' + localizedNumber(label[key]) + ' g');
-    if (facts.length) details.append(element('small', '', facts.join(' · ') + ' / ' + localizedNumber(label.basisGrams) + ' g'));
+      .filter(([key]) => Number.isFinite(label[key])).map(([key, en, ar]) => (language === 'ar' ? ar : en) + ' ' + number(label[key]) + grams);
+    if (facts.length) details.append(element('small', '', facts.join(' · ') + ' / ' + number(label.basisGrams) + grams));
   }
-  if (product.ingredients) details.append(element('small', '', getText('ingredients') + ' · ' + product.ingredients));
-  if (product.allergens) details.append(element('small', '', getText('allergens') + ' · ' + product.allergens));
-  if (!energy && !label && !product.ingredients && !product.allergens) details.append(element('small', '', getText('labelMissing')));
+  if (product.ingredients) details.append(element('small', '', getText('ingredients', language) + ' · ' + product.ingredients));
+  if (product.allergens) details.append(element('small', '', getText('allergens', language) + ' · ' + product.allergens));
+  if (!energy && !label && !product.ingredients && !product.allergens) details.append(element('small', '', getText('labelMissing', language)));
   return details;
 }
 
-function renderCard(card) {
+function renderCard(card, language) {
   const recipe = card.kind === 'recipe';
+  const t = key => getText(key, language);
+  const number = value => localizedNumber(value, language);
   const cardNode = element('section', 'result-card');
+  cardNode.lang = language;
+  cardNode.dir = language === 'ar' ? 'rtl' : 'ltr';
   const intro = element('div', 'card-intro');
-  intro.append(element('h3', '', recipe ? card.title : getText('results')));
-  if (recipe) intro.append(element('small', '', [card.minutes ? localizedNumber(card.minutes) + ' ' + getText('minutes') : '',
-    localizedNumber(card.servings) + ' ' + getText('serves')].filter(Boolean).join(' · ')));
+  intro.append(element('h3', '', recipe ? card.title : t('results')));
+  if (recipe) intro.append(element('small', '', [card.minutes ? number(card.minutes) + ' ' + t('minutes') : '',
+    number(card.servings) + ' ' + t('serves')].filter(Boolean).join(' · ')));
   if (card.nutrition) {
     const nutrition = element('div', 'recipe-energy');
-    nutrition.append(element('strong', '', localizedNumber(card.nutrition.kcalPerServing) + ' kcal'),
-      element('small', '', getText('energy')));
+    nutrition.append(element('strong', '', number(card.nutrition.kcalPerServing) + (language === 'ar' ? ' سعرة' : ' kcal')),
+      element('small', '', t('energy')));
     intro.append(nutrition);
   }
   cardNode.append(intro);
@@ -217,55 +229,40 @@ function renderCard(card) {
     const details = element('div');
     if (!product) {
       if (!recipe || !item.name) continue;
-      details.append(element('strong', '', item.name), element('small', '', [item.amount, getText('noIngredient')].filter(Boolean).join(' · ')));
+      details.append(element('strong', '', item.name), element('small', '', [item.amount, t('noIngredient')].filter(Boolean).join(' · ')));
       row.append(details);
       cardNode.append(row);
       continue;
     }
-    details.append(element('strong', '', product.name[lang] || product.name.en));
-    const metadata = [item.amount, productDetails(product)].filter(Boolean).join(' · ');
-    details.append(element('small', '', metadata));
-    if (product.description?.[lang] && (!recipe || product.sourceKind === 'screenshot')) {
-      details.append(element('small', '', product.description[lang]));
+    const name = product.name[language] || product.name.en;
+    details.append(element('strong', '', name));
+    details.append(element('small', '', productDetails(product, language, item.amount)));
+    if (product.description?.[language] && (!recipe || product.sourceKind === 'screenshot')) {
+      details.append(element('small', '', product.description[language]));
     }
-    const nutrition = nutritionInfo(product, item);
+    const nutrition = nutritionInfo(product, item, language);
     if (nutrition) details.append(nutrition);
-    const add = button('add-button', getText('add') + ' ' + product.name[lang], 'plus', () => {
-      if (!addToList([item])) return;
-      add.replaceChildren(icon('check'));
-      add.title = getText('onList');
-      add.setAttribute('aria-label', getText('onList') + ' ' + product.name[lang]);
-    }, true);
+    const alreadyAdded = list.get(item.id)?.contributions?.[card.listKey] === (item.amount || '1 pack');
+    const add = button('add-button', t(alreadyAdded ? 'onList' : 'add') + ' ' + name, alreadyAdded ? 'check' : 'plus',
+      () => addToList(card.listKey, [item], language), true);
     add.disabled = product.available === false;
-    if (list.has(item.id) && list.get(item.id).amount === (item.amount || '')) {
-      add.replaceChildren(icon('check'));
-      add.title = getText('onList');
-      add.setAttribute('aria-label', getText('onList') + ' ' + product.name[lang]);
-    }
     row.append(details, add);
     cardNode.append(row);
-    if (product.available !== false) addable.push({ item, add });
+    if (product.available !== false) addable.push(item);
   }
 
   if (recipe && card.steps?.length) {
     const details = element('details', 'steps');
     const instructions = element('ol');
     instructions.append(...card.steps.map(step => element('li', '', step)));
-    details.append(element('summary', '', getText('steps')), instructions);
+    details.append(element('summary', '', t('steps')), instructions);
     cardNode.append(details);
   }
 
-  if (addable.length > 1) {
+  if (addable.length > 1 || (recipe && addable.length === 1)) {
     const footer = element('div', 'card-footer');
-    footer.append(button('primary', getText(recipe ? 'all' : 'allProducts'), 'plus', () => {
-      addToList(addable.map(({ item }) => item));
-      for (const { add, item } of addable) {
-        const label = getText('onList') + ' ' + products.get(item.id).name[lang];
-        add.replaceChildren(icon('check'));
-        add.title = label;
-        add.setAttribute('aria-label', label);
-      }
-    }));
+    footer.append(button('primary', t(recipe ? 'all' : 'allProducts'), 'plus',
+      () => addToList(card.listKey, addable, language, recipe)));
     if (recipe) intro.after(footer);
     else cardNode.append(footer);
   }
@@ -273,6 +270,8 @@ function renderCard(card) {
 }
 
 function messageNode(message) {
+  const language = message.language ?? lang;
+  const t = key => getText(key, language);
   const row = element('article', 'message ' + (message.role === 'user' ? 'user' : 'assistant') + (message.typing ? ' typing' : ''));
   if (message.role !== 'user') {
     const avatar = element('span', 'avatar');
@@ -283,11 +282,12 @@ function messageNode(message) {
   if (message.content) {
     const bubble = element('p', 'bubble', message.content);
     bubble.dir = 'auto';
+    bubble.lang = language;
     content.append(bubble);
   }
 
   if (message.link) {
-    const link = element('a', 'prompt', getText('website'));
+    const link = element('a', 'prompt', t('website'));
     link.href = message.link;
     link.target = '_blank';
     link.rel = 'noopener';
@@ -295,16 +295,16 @@ function messageNode(message) {
     link.style.marginTop = '7px';
     content.append(link);
   }
-  if (message.card) content.append(renderCard(message.card));
+  if (message.card) content.append(renderCard(message.card, language));
   if (message.suggestedRecipes?.length) {
     const row = element('div', 'recipe-suggestions');
     for (const id of message.suggestedRecipes) {
       const recipe = recipes.get(id);
-      if (recipe) row.append(button('prompt', recipe.name[lang], 'chef', () => sendMessage(recipe.name[lang])));
+      if (recipe) row.append(button('prompt', recipe.name[language], 'chef', () => sendMessage(recipe.name[language])));
     }
     content.append(row);
   }
-  if (message.mode === 'fallback') content.append(element('p', 'response-note', getText('fallback')));
+  if (message.mode === 'fallback') content.append(element('p', 'response-note', t('fallback')));
   row.append(content);
   return row;
 }
@@ -314,7 +314,10 @@ function renderChat(scroll = 'preserve') {
   const oldPosition = region.scrollTop;
   const initial = { role: 'assistant', content: getText('welcome') };
   const nodes = [initial, ...chat].map(messageNode);
-  if (activeRequest) nodes.push(messageNode({ role: 'assistant', content: getText('typing'), typing: true }));
+  if (activeRequest) {
+    const language = chat.at(-1)?.language ?? lang;
+    nodes.push(messageNode({ role: 'assistant', content: getText('typing', language), language, typing: true }));
+  }
   region.replaceChildren(...nodes);
   if (scroll === 'latest' && chat.length) {
     region.scrollTop = nodes.at(-1).offsetTop - nodes[0].offsetTop;
@@ -324,29 +327,50 @@ function renderChat(scroll = 'preserve') {
   document.querySelector('.send').disabled = Boolean(activeRequest);
 }
 
+function saveChat() {
+  try { sessionStorage.setItem(chatKey, JSON.stringify({ messages: chat, context })); } catch { /* The chat still works in memory. */ }
+}
+
+function conversationHistory() {
+  const encoder = new TextEncoder();
+  const history = [];
+  let bytes = 0;
+  for (const { role, content, card, error } of chat.slice(-100).reverse()) {
+    if (error || (!content && !card)) continue;
+    const summary = card && {
+      kind: card.kind,
+      ...(card.kind === 'recipe' && { recipeKey: card.listKey, title: card.title, servings: card.servings }),
+      items: card.items.map(item => {
+        const product = products.get(item.id);
+        return [item.id, product?.name.en || item.name, item.amount, product?.size.en, product?.price, product?.available];
+      }),
+    };
+    const entry = { role, content: [summary && JSON.stringify(summary), content, ...(card?.steps ?? [])]
+      .filter(Boolean).join('\n').slice(0, 3000) };
+    bytes += encoder.encode(JSON.stringify(entry)).byteLength + 1;
+    if (bytes > 27000) break;
+    history.unshift(entry);
+  }
+  return history;
+}
+
 async function sendMessage(raw) {
   const content = raw.trim().slice(0, 600);
   if (!content || activeRequest) return;
   const controller = new AbortController();
   activeRequest = controller;
-  const history = chat.filter(message => !message.error).slice(-8).map(({ role, content, card }) => {
-    if (card?.kind !== 'recipe') return { role, content };
-    const recipeItems = card.items.map(item => {
-      const name = products.get(item.id)?.name?.[lang] || item.name;
-      return [name, item.amount].filter(Boolean).join(' ');
-    });
-    const recipe = [card.title + ' (' + card.servings + ' ' + getText('serves') + ')',
-      recipeItems.join(', '), ...card.steps].join('\n');
-    return { role, content: [recipe, content].filter(Boolean).join('\n') };
-  }).filter(message => message.content);
-  chat.push({ role: 'user', content });
+  const history = conversationHistory();
+  const recentLanguage = chat.findLast(message => message.language)?.language ?? lang;
+  const language = /\p{Script=Arabic}/u.test(content) ? 'ar' : /\p{Script=Latin}/u.test(content) ? 'en' : recentLanguage;
+  chat.push({ role: 'user', content, language });
+  saveChat();
   byId('question').value = '';
   renderChat('latest');
 
   try {
     const response = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: content, history, lang, context }),
+      body: JSON.stringify({ message: content, history, lang: recentLanguage, context }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(48500)]),
     });
     if (!response.ok) throw new Error('Chat unavailable');
@@ -354,14 +378,20 @@ async function sendMessage(raw) {
     await loadCatalog().catch(() => {});
     if (activeRequest !== controller) return;
     for (const product of reply.products ?? []) products.set(product.id, product);
+    if (reply.card) {
+      const revision = reply.card.revisesRecipe;
+      const previousRecipe = revision && chat.some(message => message.card?.kind === 'recipe' && message.card.listKey === revision);
+      reply.card.listKey = previousRecipe ? revision : reply.context?.recipeId ? 'demo-recipe-' + reply.context.recipeId : crypto.randomUUID();
+    }
     chat.push({ ...reply, role: 'assistant', content: reply.text });
-    context = reply.context ?? null;
+    context = reply.context ?? context;
   } catch {
     if (activeRequest !== controller) return;
-    chat.push({ role: 'assistant', content: getText('retry'), error: true });
+    chat.push({ role: 'assistant', content: getText('retry', language), language, error: true });
   } finally {
     if (activeRequest === controller) {
       activeRequest = null;
+      saveChat();
       renderChat('latest');
     }
   }
@@ -372,6 +402,7 @@ function resetChat() {
   activeRequest = null;
   chat.length = 0;
   context = null;
+  saveChat();
   byId('question').value = '';
   byId('messages').scrollTop = 0;
   renderChat();
@@ -407,7 +438,8 @@ function renderList() {
       saveList();
     });
     const description = element('span');
-    description.append(element('strong', '', product.name[lang]), element('small', '', item.amount || product.size[lang]));
+    const amount = item.contributions ? totalAmounts(Object.values(item.contributions), lang) : item.amount;
+    description.append(element('strong', '', product.name[lang]), element('small', '', amount || product.size[lang]));
     label.append(check, description);
     row.append(label, button('remove-button', getText('remove') + ' ' + product.name[lang], 'close', () => {
       list.delete(item.id);
@@ -426,22 +458,92 @@ function saveList() {
   if (widgetMode) window.parent.postMessage({ type: 'makhazen-list-changed' }, parentOrigin);
 }
 
-function addToList(items) {
-  let added = false;
-  for (const { id, amount = '' } of items) {
-    const product = products.get(id);
-    if (!product || product.available === false) continue;
-    const previous = list.get(id);
-    if (previous && (!amount || previous.amount === amount)) continue;
-    list.set(id, { id, name: product.name, amount, checked: false });
-    added = true;
+const quantityUnits = [
+  [['pack', 'packs', 'packet', 'packets', 'عبوة', 'عبوات', 'باكيت'], ['pack', 'packs'], 'عبوة'],
+  [['', 'piece', 'pieces', 'pcs', 'حبة', 'حبات', 'حبّة', 'حبّات', 'عدد'], ['piece', 'pieces'], 'حبّة'],
+  [['g', 'gr', 'gram', 'grams', 'غ', 'غرام', 'غرامات', 'جرام'], ['g', 'g'], 'غ'],
+  [['kg', 'kilo', 'kilos', 'kilogram', 'kilograms', 'كغ', 'كيلو', 'كيلوغرام'], ['kg', 'kg'], 'كغ'],
+  [['ml', 'mls', 'مل', 'ملليلتر'], ['ml', 'ml'], 'مل'],
+  [['l', 'liter', 'litre', 'liters', 'litres', 'ل', 'ليتر', 'لتر'], ['L', 'L'], 'ل'],
+  [['bunch', 'bunches', 'ربطة', 'ربطات', 'ضمة', 'ضمّة'], ['bunch', 'bunches'], 'ربطة'],
+  [['whole', 'حبة كاملة', 'حبّة كاملة'], ['whole', 'whole'], 'حبّة كاملة'],
+  [['head', 'heads', 'راس', 'رأس', 'رؤوس'], ['head', 'heads'], 'راس'],
+  [['can', 'cans', 'علبة', 'علب'], ['can', 'cans'], 'علبة'],
+  [['clove', 'cloves', 'فص', 'فصوص'], ['clove', 'cloves'], 'فص'],
+  [['tbsp', 'tablespoon', 'tablespoons', 'ملعقة كبيرة', 'ملعقة أكل', 'ملاعق كبيرة'], ['tbsp', 'tbsp'], 'ملعقة كبيرة'],
+  [['tsp', 'teaspoon', 'teaspoons', 'ملعقة صغيرة', 'ملعقة شاي', 'ملاعق صغيرة'], ['tsp', 'tsp'], 'ملعقة صغيرة'],
+  [['cup', 'cups', 'كوب', 'أكواب', 'كاسة'], ['cup', 'cups'], 'كوب'],
+];
+
+function parseQuantity(amount) {
+  const numeric = amount.toLowerCase().normalize('NFKC').replace(/[\u200E\u200F\u061C]/g, '')
+    .replace(/[٠-٩۰-۹]/g, digit => String(digit.charCodeAt(0) & 15)).replace(/٫/g, '.');
+  const match = numeric.match(/^\s*(\d*\.\d+|\d+)(?:\s*[\/⁄]\s*(\d+))?\s*([\p{L}\p{M} ]*)\s*$/u);
+  if (!match) return null;
+  const count = Number(match[1]) / Number(match[2] ?? 1);
+  if (!Number.isFinite(count) || count <= 0) return null;
+  const unit = match[3].trim().replace(/\s+/g, ' ');
+  const labels = quantityUnits.find(([aliases]) => aliases.includes(unit));
+  return { count, key: labels?.[1][0] ?? unit, labels, unit };
+}
+
+function quantityKey(amount) {
+  const quantity = parseQuantity(amount);
+  return quantity ? quantity.count + ' ' + quantity.key : amount.toLowerCase().replace(/\s+/g, '');
+}
+
+function totalAmounts(values, language) {
+  const totals = new Map();
+  const unmatched = [];
+  for (const value of values) {
+    const quantity = parseQuantity(value);
+    if (!quantity) {
+      unmatched.push(value);
+      continue;
+    }
+    const previous = totals.get(quantity.key);
+    if (previous) previous.count += quantity.count;
+    else totals.set(quantity.key, quantity);
   }
-  if (added) {
+  return [...totals.values()].map(({ count, labels, unit }) => {
+    const displayUnit = labels ? labels[language === 'ar' ? 2 : 1] : unit;
+    const label = Array.isArray(displayUnit) ? displayUnit[Number(count !== 1)] : displayUnit;
+    return [localizedNumber(count, language), label].filter(Boolean).join(' ');
+  }).concat(unmatched).join(' + ');
+}
+
+function addToList(key, items, language, replaceRecipe = false) {
+  const amounts = new Map();
+  for (const item of items) {
+    const product = products.get(item.id);
+    if (product && product.available !== false) amounts.set(item.id, item.amount || '1 pack');
+  }
+  const affected = new Set(amounts.keys());
+  if (replaceRecipe) {
+    for (const entry of list.values()) {
+      if (Object.hasOwn(entry.contributions ?? {}, key)) affected.add(entry.id);
+    }
+  }
+  let changed = false;
+  for (const id of affected) {
+    const previous = list.get(id);
+    const contributions = { ...(previous?.contributions ?? (previous ? { legacy: previous.amount || '1 pack' } : {})) };
+    const amount = amounts.get(id);
+    if (contributions[key] === amount) continue;
+    if (amount) contributions[key] = amount;
+    else delete contributions[key];
+    const values = Object.values(contributions);
+    if (values.length) list.set(id, { id, name: products.get(id)?.name ?? previous.name, contributions,
+      amount: totalAmounts(values, 'en'), checked: false });
+    else list.delete(id);
+    changed = true;
+  }
+  if (changed) {
     saveList();
     renderList();
+    renderChat();
   }
-  showToast(getText(added ? 'added' : 'already'));
-  return added;
+  showToast(getText(changed ? 'added' : 'already', language));
 }
 
 function showToast(text) {

@@ -5,7 +5,8 @@
   "outputDirectory": "public",
   "functions": {
     "api/chat.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "supportsCancellation": true
     }
   },
   "headers": [
