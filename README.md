@@ -31,6 +31,8 @@ Vercel Hobby is for personal or non-commercial use. Vercel Pro supports commerci
 
 The model searches the selected catalog through a server-side tool. It creates recipes with servings and amounts, retrieves named products, and can show product descriptions or nutrition values when the inventory includes them. The app calculates recipe energy when all ingredients have usable weights and calorie values. The chat uses plain-text replies and recipe cards, with the inventory as its only lookup tool. Brand-specific prices, availability and labels come from the inventory.
 
+Ask Co-op answers grocery shopping, food, recipes and Co-op store questions. It redirects unrelated requests, including requests to generate code with shopping examples.
+
 ## Import Co-op inventory
 
 A read-only export or a supported POS or ecommerce API is the best source. Ask for a UTF-8 CSV with one row per SKU per branch. The header must include sku, name and category. Use category keys such as produce, dairy, meat, bakery, pantry, fish, ready, school or offers. The optional columns cover the following fields.
