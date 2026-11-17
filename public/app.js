@@ -303,7 +303,7 @@ function messageNode(message) {
     link.style.marginTop = '7px';
     content.append(link);
   }
-  if (message.card) content.append(renderCard(message.card, language));
+  if (message.card && !message.priceOnly) content.append(renderCard(message.card, language));
   if (message.suggestedRecipes?.length) {
     const row = element('div', 'recipe-suggestions');
     for (const id of message.suggestedRecipes) {
