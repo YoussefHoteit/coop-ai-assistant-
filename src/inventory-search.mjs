@@ -23,10 +23,19 @@ export function createInventorySearch(products, categoryLabels, normalize) {
     ['salt', 'ملح', 'sel'], ['pepper', 'فلفل', 'poivre'],
     ['sugar', 'سكر', 'sucre'], ['water', 'ماء', 'مياه', 'eau', 'may'],
     ['parmesan', 'بارميزان', 'parmesan'], ['olive oil', 'زيت زيتون', 'huile olive', 'zeit zaytoun'],
+    ['car charger', 'car adapter', 'شاحن سيارة', 'chargeur voiture', 'shahen sayara'],
+    ['charger', 'chargers', 'شاحن', 'chargeur'],
+    ['socks', 'sock', 'شرابات', 'جرابات', 'chaussettes', 'jrab', 'sharabet'],
+    ['pencil', 'pencils', 'قلم رصاص', 'crayon'], ['pen', 'pens', 'قلم', 'اقلام', 'stylo'],
+    ['backpack', 'backpacks', 'school bag', 'schoolbag', 'rucksack', 'حقيبة مدرسية', 'شنطة مدرسة', 'sac ecole'],
+    ['pencil case', 'pencilcase', 'مقلمة', 'trousse'],
+    ['notebook', 'notebooks', 'notebk', 'note book', 'دفتر', 'دفاتر', 'cahier'],
+    ['ruler', 'rulers', 'ruller', 'مسطرة', 'regle'],
+    ['eraser', 'erasers', 'ممحاة', 'gomme'], ['sharpener', 'براية', 'taille crayon'],
   ].map(group => group.map(normalize));
   const variants = new Map();
   for (const group of groups) for (const word of group) variants.set(word, group);
-  const singular = word => word.length > 4 ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
+  const singular = word => word.length > 3 && !word.endsWith('ss') ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
   const wordsOf = value => normalize(value).split(' ').filter(Boolean);
   const indexed = products.map(product => {
     const name = normalize(product.name.en);
