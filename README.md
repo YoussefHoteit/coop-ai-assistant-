@@ -35,6 +35,26 @@ Ask Co-op answers grocery shopping, food, recipes and Co-op store questions. It 
 
 ## Import Co-op inventory
 
+### Complete website catalog
+
+The assistant now uses all **7,666 products** from `Al_Makhazen_Product_Catalog.xlsx` as its default inventory. The catalog contains **5,075 available** and **2,591 sold-out** entries as recorded on **19 November 2026**, for Beirut. These are recorded website values, not a live stock feed.
+
+Names, descriptions when supplied, USD prices, brands, departments, category labels, SKUs, product IDs and product URLs are preserved. Empty descriptions, nutrition labels and allergens remain unknown; the assistant must not invent them. The previous illustrative and screenshot records are excluded from active product results.
+
+The server indexes the complete catalog and sends only relevant search results to the model. Product ID, SKU, name, brand, size and category searches are supported, with common English, Arabic, French and Arabizi ingredient terms. Recipe cards and shopping lists resolve against these same product IDs.
+
+To refresh from an Excel export with the same Products worksheet columns:
+
+    python scripts/import-excel-catalog.py "C:\path\Al_Makhazen_Product_Catalog.xlsx"
+    npm run build
+    npm test
+
+`src/inventory-catalog.json.gz` is the versioned catalog used during deployment. The importer verifies the row count, unique product IDs, numeric prices and stock flags before writing it. Pass `--expected-count` for a future export with a different product count. An optional local `approved-inventory.json` still takes precedence when deliberately provided.
+
+The catalog endpoint reports `catalogTotal`, `snapshotDate`, and supports `offset` and `limit` for paging through every record. No OpenAI key is required to validate catalog coverage. API credentials remain on the server.
+
+### Optional CSV feed
+
 A read-only export or a supported POS or ecommerce API is the best source. Ask for a UTF-8 CSV with one row per SKU per branch. The header must include sku, name and category. Use category keys such as produce, dairy, meat, bakery, pantry, fish, ready, school or offers. The optional columns cover the following fields.
 
 - branch, name_ar, size, size_ar, aliases (pipe separated), recipe_ingredient
