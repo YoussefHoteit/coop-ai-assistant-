@@ -12,6 +12,7 @@ const staticFiles = {
   'widget-preview.html': 'text/html; charset=utf-8',
   'app.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
+  'language.js': 'text/javascript; charset=utf-8',
   'widget.js': 'text/javascript; charset=utf-8',
   'groceries.jpg': 'image/jpeg',
 };
@@ -35,10 +36,11 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 const nutrition = await readFile(join(project, 'src', 'nutrition.mjs'), 'utf8');
+const language = (await readFile(join(project, 'public', 'language.js'), 'utf8')).replace(/^export /gm, '');
 const inventorySearch = (await readFile(join(project, 'src', 'inventory-search.mjs'), 'utf8')).replace(/^export /gm, '');
 const source = await readFile(join(project, 'src', 'worker.mjs'), 'utf8');
 const worker = 'const ASSETS = ' + JSON.stringify(Object.fromEntries(entries)) + ';\nconst DATA = ' +
-  JSON.stringify(data) + ';\n' + nutrition + '\n' + inventorySearch + '\n' + source;
+  JSON.stringify(data) + ';\n' + nutrition + '\n' + language + '\n' + inventorySearch + '\n' + source;
 const output = join(project, 'dist');
 const workerPath = join(output, 'server', 'index.js');
 await mkdir(dirname(workerPath), { recursive: true });

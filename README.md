@@ -33,6 +33,8 @@ The model searches the selected catalog through a server-side tool. It creates r
 
 Ask Co-op answers grocery shopping, food, recipes and Co-op store questions. It redirects unrelated requests, including requests to generate code with shopping examples.
 
+Replies follow each shopper message: English (`en`), Arabic script (`ar`), or Lebanese Arabizi (`arz`, Arabic written with Latin letters and optional numerals). Language changes take effect within the same conversation while preserving shopping context. Arabizi is supported in streamed replies, recipe titles and steps, ingredient names and quantities, card labels, errors, scope redirects and price follow-ups. Original brand names can remain unchanged. Numeric-only follow-ups preserve the recent conversational language. Model responses with the wrong script are corrected once before falling back to a matching-language response.
+
 ## Import Co-op inventory
 
 ### Complete website catalog

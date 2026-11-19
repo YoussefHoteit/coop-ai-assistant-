@@ -1,11 +1,13 @@
+import { detectReplyLanguage, arabiziChatCopy } from './language.js';
+
 const copy = {
   en: {
     newChat: 'New chat', assistant: 'Assistant', products: 'Browse products', recipes: 'Recipe ideas',
     list: 'Shopping list', widget: 'Widget preview', website: 'Store website', pageTitle: 'Shopping Assistant',
     heroTitle: 'What’s on your\nshopping list?', heroIntro: 'Find groceries, get recipe ideas, and collect what you need in one list.',
-    chatTitle: 'Ask Co-op', chatSubtitle: 'Products, recipes and nutrition', inputLabel: 'Your message',
+    chatTitle: 'Ask COOP', chatSubtitle: 'Products, recipes and nutrition', inputLabel: 'Your message',
     input: 'Ask about a product or recipe…', send: 'Send message', sample: 'Preview catalog · public listings and illustrative items',
-    screenshot: 'Co-op screenshot catalog · prices and stock as shown', approved: 'Inventory snapshot · confirm current availability with Co-op',
+    screenshot: 'COOP screenshot catalog · prices and stock as shown', approved: 'Inventory snapshot · confirm current availability with COOP',
     welcome: 'Hi! I can help you find groceries, check product details, or plan a recipe and its shopping list.',
     demo: 'Demo mode', ai: 'AI mode', empty: 'Your list is empty', emptyInfo: 'Add products or recipe ingredients as you chat.',
     copy: 'Copy list', item: 'item', items: 'items', add: 'Add to list', added: 'Added to your shopping list.',
@@ -55,6 +57,8 @@ const copy = {
   },
 };
 
+copy.arz = { ...copy.en, ...arabiziChatCopy };
+
 const byId = id => document.getElementById(id);
 const storage = {
   read(key, fallback) {
@@ -89,7 +93,7 @@ let replyPreview;
 let toastTimeout;
 let dialogKind;
 
-const getText = (key, language = lang) => copy[language][key];
+const getText = (key, language = lang) => (copy[language] || copy.en)[key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
 const localizedNumber = (number, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US').format(number);
 const price = (amount, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -177,7 +181,7 @@ function productDetails(product, language = lang, amount = '') {
   const sample = product.sourceKind === 'sample';
   const status = product.available === null ? 'unknown' : product.available === true ? (sample ? 'available' : 'inStock')
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
-  const size = product.size[language];
+  const size = product.size[language] || product.size.en;
   const sameSize = amount && size && quantityKey(amount) === quantityKey(size);
   return [amount, sameSize ? '' : formatPackSize(size, language), Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
     product.promotion ? getText('promotion', language) : ''].filter(Boolean).join(' · ');
@@ -217,7 +221,7 @@ function renderCard(card, language) {
   const t = key => getText(key, language);
   const number = value => localizedNumber(value, language);
   const cardNode = element('section', 'result-card');
-  cardNode.lang = language;
+  cardNode.lang = language === 'arz' ? 'ar-Latn-LB' : language;
   cardNode.dir = language === 'ar' ? 'rtl' : 'ltr';
   const intro = element('div', 'card-intro');
   intro.append(element('h3', '', recipe ? card.title : t('results')));
@@ -243,7 +247,7 @@ function renderCard(card, language) {
       cardNode.append(row);
       continue;
     }
-    const name = product.name[language] || product.name.en;
+    const name = language === 'arz' && recipe && item.name ? item.name : product.name[language] || product.name.en;
     details.append(element('strong', '', name));
     details.append(element('small', '', productDetails(product, language, item.amount)));
     if (product.description?.[language] && (!recipe || product.sourceKind === 'screenshot')) {
@@ -291,7 +295,7 @@ function messageNode(message) {
   if (message.content) {
     const bubble = element('p', 'bubble', message.content);
     bubble.dir = 'auto';
-    bubble.lang = language;
+    bubble.lang = language === 'arz' ? 'ar-Latn-LB' : language;
     content.append(bubble);
   }
 
@@ -345,7 +349,7 @@ function showReplyPreview(text, language) {
   const row = region.lastElementChild;
   const bubble = row.querySelector('.bubble');
   row.classList.toggle('typing', replyPreview.typing);
-  bubble.lang = language;
+  bubble.lang = language === 'arz' ? 'ar-Latn-LB' : language;
   bubble.textContent = replyPreview.content;
   if (follow) region.scrollTop = region.scrollHeight;
 }
@@ -447,7 +451,7 @@ async function sendMessage(raw) {
   activeRequest = controller;
   const history = conversationHistory();
   const recentLanguage = chat.findLast(message => message.language)?.language ?? lang;
-  const language = /(?=\p{L})\p{Script=Arabic}/u.test(content) ? 'ar' : /\p{Script=Latin}/u.test(content) ? 'en' : recentLanguage;
+  const language = detectReplyLanguage(content, recentLanguage);
   chat.push({ role: 'user', content, language });
   saveChat();
   byId('question').value = '';
