@@ -47,7 +47,7 @@ test('AI requests enforce the latest language through English, Arabic and Arabiz
       globalThis.fetch = async (_url, options) => {
         const body = JSON.parse(options.body);
         if (++calls === 1) {
-          assert.deepEqual(body.text.format.schema.properties.language.enum, ['en', 'ar', 'arz']);
+          assert.deepEqual(body.text.format.schema.properties.language.enum, ['en', 'ar', 'arz', 'fr']);
           return Response.json({ output: output({ allowed: true, language: lang, priceOnly: false }) });
         }
         assert.ok(body.instructions.includes(lang === 'arz' ? 'Arabizi: conversational Lebanese Arabic' : lang === 'ar' ? 'Arabic using Arabic script' : 'English. Write all prose'));

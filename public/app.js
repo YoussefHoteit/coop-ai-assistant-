@@ -1,4 +1,4 @@
-import { detectReplyLanguage, arabiziChatCopy } from './language.js';
+import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
 
 const copy = {
   en: {
@@ -58,6 +58,7 @@ const copy = {
 };
 
 copy.arz = { ...copy.en, ...arabiziChatCopy };
+copy.fr = { ...copy.en, ...frenchChatCopy };
 
 const byId = id => document.getElementById(id);
 const storage = {
@@ -95,8 +96,8 @@ let dialogKind;
 
 const getText = (key, language = lang) => (copy[language] || copy.en)[key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
-const localizedNumber = (number, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US').format(number);
-const price = (amount, language = lang) => new Intl.NumberFormat(language === 'ar' ? 'ar-LB' : 'en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const localizedNumber = (number, language = lang) => new Intl.NumberFormat(replyLocale(language)).format(number);
+const price = (amount, language = lang) => new Intl.NumberFormat(replyLocale(language), { style: 'currency', currency: 'USD' }).format(amount);
 
 function element(tag, className = '', text) {
   const node = document.createElement(tag);
@@ -188,6 +189,7 @@ function productDetails(product, language = lang, amount = '') {
 }
 
 function formatPackSize(size, language) {
+  if (size && language === 'fr') return size.replace(/\b(?:pieces?|pcs)\b/gi, 'pièces').replace(/\bpacks?\b/gi, 'paquet(s)');
   if (!size || language !== 'ar') return size;
   const units = { pieces: 'قطعة', piece: 'قطعة', pcs: 'قطعة', packs: 'عبوة', pack: 'عبوة',
     g: 'غ', gr: 'غ', kg: 'كغ', ml: 'مل', cl: 'سل', l: 'ل', lb: 'رطل', oz: 'أونصة' };
@@ -207,7 +209,7 @@ function nutritionInfo(product, item, language) {
     (energy.sourceKind === 'generic-estimate' ? ' · ' + getText('genericEnergy', language) : '')));
   if (label?.basisGrams) {
     const facts = [['protein', 'Protein', 'بروتين'], ['carbs', 'Carbs', 'نشويات'], ['fat', 'Fat', 'دهون']]
-      .filter(([key]) => Number.isFinite(label[key])).map(([key, en, ar]) => (language === 'ar' ? ar : en) + ' ' + number(label[key]) + grams);
+      .filter(([key]) => Number.isFinite(label[key])).map(([key, en, ar]) => (language === 'fr' ? ({ protein: 'Protéines', carbs: 'Glucides', fat: 'Lipides' })[key] : language === 'ar' ? ar : en) + ' ' + number(label[key]) + grams);
     if (facts.length) details.append(element('small', '', facts.join(' · ') + ' / ' + number(label.basisGrams) + grams));
   }
   if (product.ingredients) details.append(element('small', '', getText('ingredients', language) + ' · ' + product.ingredients));
@@ -247,7 +249,7 @@ function renderCard(card, language) {
       cardNode.append(row);
       continue;
     }
-    const name = language === 'arz' && recipe && item.name ? item.name : product.name[language] || product.name.en;
+    const name = (language === 'fr' || (language === 'arz' && recipe)) && item.name ? item.name : product.name[language] || product.name.en;
     details.append(element('strong', '', name));
     details.append(element('small', '', productDetails(product, language, item.amount)));
     if (product.description?.[language] && (!recipe || product.sourceKind === 'screenshot')) {

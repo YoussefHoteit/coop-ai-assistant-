@@ -39,6 +39,8 @@ Replies follow each shopper message: English (`en`), Arabic script (`ar`), or Le
 
 ## Import Co-op inventory
 
+French (`fr`) is also supported automatically from each shopper message, alongside English, Arabic and Arabizi. This includes streamed answers, product and recipe cards, ingredient quantities, nutrition labels, price follow-ups, school-kit suggestions and service errors. French queries can search the complete catalog using translated product terms, synonyms and abbreviations. Switching language preserves the conversation and product context; numeric follow-ups retain the recent language. Product brand names stay as listed.
+
 ### Complete website catalog
 
 The assistant now uses all **7,666 products** from `Al_Makhazen_Product_Catalog.xlsx` as its default inventory. The catalog contains **5,075 available** and **2,591 sold-out** entries as recorded on **19 November 2026**, for Beirut. These are recorded website values, not a live stock feed.

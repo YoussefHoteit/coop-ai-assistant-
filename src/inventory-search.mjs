@@ -3,7 +3,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
   const groups = [
     ['chicken', 'دجاج', 'جاج', 'poulet', 'djej', 'jaj'],
     ['beef', 'بقر', 'boeuf'], ['fish', 'سمك', 'poisson'],
-    ['shrimp', 'روبيان', 'قريدس', 'crevette'],
+    ['shrimp', 'روبيان', 'قريدس', 'crevette', 'crevettes'],
     ['pasta', 'معكرونة', 'مكرونة', 'باستا', 'pates'],
     ['rice', 'رز', 'ارز', 'riz'], ['milk', 'حليب', 'lait', '7alib'],
     ['cream', 'كريمة', 'creme'], ['butter', 'زبدة', 'beurre', 'zebde'],
@@ -17,17 +17,17 @@ export function createInventorySearch(products, categoryLabels, normalize) {
     ['garlic', 'ثوم', 'توم', 'ail', 'toum'], ['lemon', 'lemons', 'ليمون', 'حامض', 'citron', '7amod'],
     ['mushrooms', 'mushroom', 'فطر', 'champignon'],
     ['parsley', 'بقدونس', 'persil', 'ba2dounes'], ['mint', 'نعناع', 'menthe', 'na3na3'],
-    ['chickpeas', 'chickpea', 'حمص', 'hummus'], ['tahini', 'طحينة', 'tahina'],
+    ['chickpeas', 'chickpea', 'حمص', 'hummus', 'pois chiches'], ['tahini', 'طحينة', 'tahina'],
     ['bread', 'خبز', 'pain', 'khobez'], ['lettuce', 'خس', 'laitue'],
     ['carrots', 'carrot', 'جزر', 'carotte'], ['bulgur', 'برغل', 'burghol', 'boulgour'],
     ['salt', 'ملح', 'sel'], ['pepper', 'فلفل', 'poivre'],
     ['sugar', 'سكر', 'sucre'], ['water', 'ماء', 'مياه', 'eau', 'may'],
     ['parmesan', 'بارميزان', 'parmesan'], ['olive oil', 'زيت زيتون', 'huile olive', 'zeit zaytoun'],
-    ['car charger', 'car adapter', 'شاحن سيارة', 'chargeur voiture', 'shahen sayara'],
+    ['car charger', 'car adapter', 'شاحن سيارة', 'chargeur voiture', 'chargeur de voiture', 'shahen sayara'],
     ['charger', 'chargers', 'شاحن', 'chargeur'],
     ['socks', 'sock', 'شرابات', 'جرابات', 'chaussettes', 'jrab', 'sharabet'],
     ['pencil', 'pencils', 'قلم رصاص', 'crayon'], ['pen', 'pens', 'قلم', 'اقلام', 'stylo'],
-    ['backpack', 'backpacks', 'school bag', 'schoolbag', 'rucksack', 'حقيبة مدرسية', 'شنطة مدرسة', 'sac ecole'],
+    ['backpack', 'backpacks', 'school bag', 'schoolbag', 'rucksack', 'حقيبة مدرسية', 'شنطة مدرسة', 'sac ecole', 'sac a dos', 'cartable'],
     ['pencil case', 'pencilcase', 'مقلمة', 'trousse'],
     ['notebook', 'notebooks', 'notebk', 'note book', 'دفتر', 'دفاتر', 'cahier'],
     ['ruler', 'rulers', 'ruller', 'مسطرة', 'regle'],
@@ -36,6 +36,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
   const variants = new Map();
   for (const group of groups) for (const word of group) variants.set(word, group);
   const singular = word => word.length > 3 && !word.endsWith('ss') ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
+  for (const group of groups) for (const word of group) if (!word.includes(' ')) variants.set(singular(word), group);
   const wordsOf = value => normalize(value).split(' ').filter(Boolean);
   const indexed = products.map(product => {
     const name = normalize(product.name.en);
@@ -52,7 +53,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
   function search(input = '', category) {
     const query = normalize(input);
     const queryWords = wordsOf(query);
-    const queryVariants = variants.get(query) || [query];
+    const queryVariants = variants.get(query) || variants.get(singular(query)) || [query];
     return indexed.filter(entry => !category || entry.categoryKeys.includes(category) ||
       (category === 'offers' && entry.product.promotion === true)).map(entry => {
       if (!query) return { entry, score: 1 };
@@ -62,7 +63,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       let score = 0;
       if (queryVariants.some(term => entry.names.some(name => (' ' + name + ' ').includes(' ' + term + ' ')))) score = 500;
       if (!score) {
-        const hits = queryWords.map(word => (variants.get(word) || [word]).some(term => {
+        const hits = queryWords.map(word => (variants.get(word) || variants.get(singular(word)) || [word]).some(term => {
           const parts = wordsOf(term).map(singular);
           return parts.every(part => entry.tokens.has(part) || (part.length >= 4 &&
             [...entry.tokens].some(token => token.startsWith(part))));

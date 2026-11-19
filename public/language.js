@@ -1,8 +1,15 @@
-export const replyLanguages = ['en', 'ar', 'arz'];
+export const replyLanguages = ['en', 'ar', 'arz', 'fr'];
 
 const arabicScript = /(?=\p{L})\p{Script=Arabic}/u;
 const latinScript = /\p{Script=Latin}/u;
-const arabiziWords = /\b(?:marhaba|ahlan|badd[iey]|bade|badi|badna|baddna|ne7na|nehna|na7na|ma3e|ma3i|ma3na|ma3ak|3ande|3andi|3and\w*|shu|shou|kif|keef|adde|ade|addesh|addeish|2adde|2ade|2addesh|kam|hayda|hayde|haydi|haydol|halla2|hala2|bkam|bikaffi|bekaffe|bikaffe|ta3mol|ta3mel|a3mol|a3mel|a3mlo|a3mela|3mela|3mlo|bte2dar|fina|bteswa|bteswe|badde|akhas|arkhas|ar5as|ghale|ghali|nekol|nekol|nakol|nakoul|nkol|netbokh|ntbokh|matbakh|wasfe|wasfet|salam|yalla|merci|khalas|tayeb|tayyeb)\b|\b[a-z]+[23789][a-z]+\b|\b[23789][a-z]{3,}\b/i;
+const arabiziWords = /\b(?:marhaba|ahlan|badd[iey]|bade|badi|badna|baddna|ne7na|nehna|na7na|ma3e|ma3i|ma3na|ma3ak|3ande|3andi|3and\w*|shu|shou|kif|keef|adde|ade|addesh|addeish|2adde|2ade|2addesh|kam|hayda|hayde|haydi|haydol|halla2|hala2|bkam|bikaffi|bekaffe|bikaffe|ta3mol|ta3mel|a3mol|a3mel|a3mlo|a3mela|3mela|3mlo|bte2dar|fina|bteswa|bteswe|badde|akhas|arkhas|ar5as|ghale|ghali|nekol|nakol|nakoul|nkol|netbokh|ntbokh|matbakh|wasfe|wasfet|salam|yalla|khalas|tayeb|tayyeb)\b|\b[a-z]+[23789][a-z]+\b|\b[23789][a-z]{3,}\b/i;
+
+export function isFrench(text) {
+  const folded = text.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[’']/g, ' ');
+  return /\b(?:bonjour|bonsoir|salut|recettes?|combien|pouvez|pourriez|voudrais|veux|cherche|avez|vendez|disponible|disponibles|cheres?|moins cher|prix|francais|francaise|acheter|coutent?|coute|conservez|conserver|preparer|preparez|proposez|recommandez|manger)\b|\b(?:s il vous plait|je souhaite|est ce que|pour (?:\d+|deux|trois|quatre|cinq|six)|et pour|un autre|une autre)\b|^(?:oui|non|d accord|bien sur|merci)[.!?\s]*$/.test(folded);
+}
+
+export const replyLocale = language => language === 'ar' ? 'ar-LB' : language === 'fr' ? 'fr-FR' : 'en-US';
 
 export function isArabizi(text) {
   return !arabicScript.test(text) && arabiziWords.test(text);
@@ -12,19 +19,24 @@ export function detectReplyLanguage(text, recentLanguage = 'en') {
   const recent = replyLanguages.includes(recentLanguage) ? recentLanguage : 'en';
   if (arabicScript.test(text)) return 'ar';
   if (isArabizi(text)) return 'arz';
+  if (/^merci[.!\s]*$/i.test(text)) return recent === 'arz' ? recent : 'fr';
+  if (isFrench(text)) return 'fr';
   if (!latinScript.test(text) || /^(?:ok|okay|k|yes\/no)[.!?\s]*$/i.test(text)) return recent;
   return 'en';
 }
 
 export function chooseReplyLanguage(text, recentLanguage, classifiedLanguage) {
   const detected = detectReplyLanguage(text, recentLanguage);
+  if (/^merci[.!\s]*$/i.test(text)) return detected;
   if (isArabizi(text) || (arabicScript.test(text) && !latinScript.test(text))) return detected;
+  if (!arabicScript.test(text) && isFrench(text)) return 'fr';
   if (!arabicScript.test(text) && /\b(?:how|what|which|can|could|please|recommend|recipe|ingredients|price|write|give|need)\b/i.test(text) && !isArabizi(text)) return 'en';
   return replyLanguages.includes(classifiedLanguage) ? classifiedLanguage : detected;
 }
 
 export const replyLanguageInstructions = {
   en: 'English. Write all prose, recipe titles, preparation steps, ingredient names and quantities in English. Do not switch to Arabic or Arabizi.',
+  fr: 'French. Write all prose, recipe titles, preparation steps, ingredient names, quantities and shopping-kit explanations in natural French. Do not switch to English, Arabic or Arabizi. Retain original brand names and familiar dish names only when needed to identify them.',
   ar: 'Arabic using Arabic script. Write all prose, recipe titles, preparation steps, ingredient names and quantities in Arabic. Retain original brand names only when needed to identify a product.',
   arz: 'Arabizi: conversational Lebanese Arabic written in Latin letters, with familiar numerals such as 2, 3 and 7 when helpful. For example: "Eh, fik ta3mol pasta ma3 djej la 3 ashkhas." Write the entire answer, recipe titles, preparation steps, ingredient names and quantities in this style. Never use Arabic script. Do not answer in English sentences. Retain original brand names and familiar dish names when needed.',
 };
@@ -34,7 +46,8 @@ export function replyUsesCorrectScript(reply, language) {
     ...(reply.items || []).flatMap(item => [item.name, item.amount])].filter(Boolean).join(' ');
   if (language !== 'ar') {
     if (arabicScript.test(prose)) return false;
-    if (language === 'arz' && /\b(?:you can|you will|here are|here is|the ingredients|cook the|add the|mix the|serve with|i can|i found|this is|these are|let me|to make|you need)\b/i.test(prose)) return false;
+    if (['arz', 'fr'].includes(language) && /\b(?:you can|you will|here are|here is|the ingredients|cook the|add the|mix the|serve with|i can|i found|this is|these are|let me|to make|you need)\b/i.test(prose)) return false;
+    if (language === 'fr' && isArabizi(prose)) return false;
     return true;
   }
   const main = [reply.answer, reply.recipe?.title, ...(reply.recipe?.steps || [])].filter(Boolean).join(' ');
@@ -85,4 +98,43 @@ export const arabiziRecipes = {
   hummus: { title: '7ommos bi t7ine', steps: ['Saffe el 7ommos w ghslo.', 'E7an el 7ommos ma3 el t7ine, el 7amod, el toum w el mele7.', 'Zid shwayyet may la tousal lal konsistens li bte7ebba, w 2addmo ma3 zeit zaytoun.'] },
   mujaddara: { title: 'Mjaddara', steps: ['Ghsil el 3adas w eslo2o la yitrayya.', '7ammer el basal bel zeit.', 'Zid el rezz, el mele7 w may 7asab el 7aje ma3 el 3adas.', 'Khalli el tanjra 3a nar hadye la yistwe el rezz, w 2addma ma3 el basal el m7ammar.'] },
   'batata-harra': { title: 'Batata 7arra', steps: ['2atta3 el batata mka3bat w 7ammesa bel forn ma3 shwayyet zeit la testawe.', '2alleb el toum w el paprika bel zeit.', 'Zid el batata, el 7amod w el mele7, khalloton w 2addma sekhne.'] },
+};
+
+export const frenchChatCopy = {
+  results: 'Produits du catalogue', steps: 'Préparation', minutes: 'min', serves: 'personnes',
+  add: 'Ajouter à la liste', added: 'Ajouté à votre liste de courses.', already: 'Déjà dans votre liste de courses.',
+  onList: 'Dans votre liste', all: 'Ajouter tous les ingrédients', allProducts: 'Ajouter tous les produits',
+  available: 'Disponible', unavailable: 'Indisponible', inStock: 'Disponible', outOfStock: 'Épuisé', unknown: 'Disponibilité non confirmée',
+  promotion: 'Promotion', noIngredient: 'Disponibilité non confirmée', energy: 'Calories estimées par personne',
+  genericEnergy: 'Estimation', labelMissing: 'Informations nutritionnelles absentes du catalogue pour ce produit.',
+  ingredients: 'Ingrédients', allergens: 'Allergènes', typing: 'Recherche en cours…',
+  retry: 'Impossible de charger la réponse. Veuillez réessayer.',
+  fallback: 'Le service IA est indisponible. Cette réponse utilise le catalogue.', website: 'Site Al Makhazen',
+};
+
+export const frenchMessages = {
+  products: 'Voici les produits trouvés dans le catalogue.', unavailable: 'Ce produit est indisponible.', soldOut: 'Ce produit est épuisé.',
+  store: 'Consultez le site Al Makhazen pour les informations sur la livraison, le retrait, les magasins et les commandes.',
+  greeting: 'Bonjour ! Je peux vous aider à trouver des produits, vérifier les prix ou préparer une recette et sa liste de courses.',
+  scope: 'Je peux vous aider avec les produits COOP, les prix, les recettes, les listes de courses et les questions sur le magasin.',
+  ideas: 'Vous pouvez préparer du taboulé, du fattouche, du houmous, de la moujadara ou des pommes de terre épicées. Que préférez-vous ?',
+  example: 'Aucun produit correspondant trouvé. Essayez un autre nom de produit ou de recette.',
+  empty: 'Aucun produit correspondant à ce budget trouvé dans le catalogue.',
+};
+
+export const frenchIngredients = {
+  parsley: 'persil', tomatoes: 'tomates', mint: 'menthe', lemons: 'citrons', onions: 'oignons',
+  cucumbers: 'concombres', lettuce: 'laitue', garlic: 'ail', potatoes: 'pommes de terre', radishes: 'radis',
+  'spring-onions': 'oignons nouveaux', bulgur: 'boulgour', 'olive-oil': 'huile d’olive', chickpeas: 'pois chiches',
+  tahini: 'tahini', lentils: 'lentilles', rice: 'riz', sumac: 'sumac', molasses: 'mélasse de grenade',
+  salt: 'sel', pita: 'pain pita', cumin: 'cumin', paprika: 'paprika',
+};
+export const frenchUnits = { bunch: ['botte', 'bottes'], whole: ['pièce', 'pièces'], head: ['pièce', 'pièces'],
+  g: ['g', 'g'], tbsp: ['c. à soupe', 'c. à soupe'], tsp: ['c. à café', 'c. à café'], can: ['boîte', 'boîtes'], clove: ['gousse', 'gousses'] };
+export const frenchRecipes = {
+  tabbouleh: { title: 'Taboulé', steps: ['Lavez et séchez les légumes et les herbes.', 'Faites tremper le boulgour. Hachez finement le persil, la menthe, les tomates et les oignons.', 'Mélangez avec le jus de citron, l’huile d’olive et le sel. Servez frais.'] },
+  fattoush: { title: 'Fattouche', steps: ['Lavez et coupez les légumes.', 'Faites griller le pain jusqu’à ce qu’il soit croustillant.', 'Mélangez les légumes avec l’ail, le citron, l’huile, le sumac et le sel.', 'Ajoutez le pain juste avant de servir.'] },
+  hummus: { title: 'Houmous', steps: ['Égouttez et rincez les pois chiches.', 'Mixez-les avec le tahini, le citron, l’ail et le sel.', 'Ajoutez un peu d’eau pour ajuster la texture, puis servez avec l’huile d’olive.'] },
+  mujaddara: { title: 'Moujadara', steps: ['Rincez les lentilles et faites-les cuire jusqu’à ce qu’elles soient tendres.', 'Faites dorer les oignons dans l’huile.', 'Ajoutez le riz aux lentilles avec du sel et suffisamment d’eau.', 'Laissez cuire à feu doux jusqu’à cuisson du riz. Servez avec les oignons dorés.'] },
+  'batata-harra': { title: 'Pommes de terre épicées', steps: ['Coupez les pommes de terre en cubes et faites-les rôtir au four avec un peu d’huile.', 'Faites revenir l’ail et le paprika dans l’huile.', 'Ajoutez les pommes de terre, le citron et le sel. Mélangez et servez chaud.'] },
 };
