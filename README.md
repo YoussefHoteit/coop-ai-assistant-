@@ -39,6 +39,8 @@ Replies follow each shopper message: English (`en`), Arabic script (`ar`), or Le
 
 ## Import Co-op inventory
 
+Recipe ingredient matching uses the complete catalog on the server as well as the model's inventory lookups. Each recipe ingredient includes a short English `catalogQuery` so localized names can resolve to the same real product ID. Common spelling variants and ingredient types are matched with category checks; for example, Fettucine/Fettucini pasta and 35% cream can be found without selecting unrelated snacks, cream cheese, milk powder or personal-care products. Suitable available records are preferred for generic ingredients. Genuine sold-out status remains unchanged, and missing ingredients are labeled as having no matching catalog product. Recipe quantities and shopping-list product IDs remain connected to these resolved records.
+
 French (`fr`) is also supported automatically from each shopper message, alongside English, Arabic and Arabizi. This includes streamed answers, product and recipe cards, ingredient quantities, nutrition labels, price follow-ups, school-kit suggestions and service errors. French queries can search the complete catalog using translated product terms, synonyms and abbreviations. Switching language preserves the conversation and product context; numeric follow-ups retain the recent language. Product brand names stay as listed.
 
 ### Complete website catalog

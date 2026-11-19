@@ -81,8 +81,8 @@ test('AI recipe tool searches the full inventory and rejects fabricated product 
     const results = JSON.parse(body.input.find(p => p.type === 'function_call_output').output);
     assert.equal(results.length, 6);
     chosen = results.map(({ query, results }) => {
-      const product = results.find(p => p.available === true);
-      assert.ok(product, 'No available match for ' + query);
+      const product = results.find(p => p.available === true) || results[0];
+      assert.ok(product, 'No catalog match for ' + query);
       assert.equal(product.sourceKind, 'catalog');
       return { id: product.id, name: query, amount: '100 g', grams: 100 };
     });
