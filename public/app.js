@@ -1,4 +1,5 @@
 import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
+import { customerCopy } from './customer-copy.js';
 
 const copy = {
   en: {
@@ -59,10 +60,7 @@ const copy = {
 
 copy.arz = { ...copy.en, ...arabiziChatCopy };
 copy.fr = { ...copy.en, ...frenchChatCopy };
-copy.en.noIngredient = 'No matching product in the COOP catalog';
-copy.ar.noIngredient = 'لم أجد منتجاً مطابقاً في كتالوج COOP';
-copy.arz.noIngredient = 'Ma la2ayt product mneseb bel catalog COOP';
-copy.fr.noIngredient = 'Aucun produit correspondant dans le catalogue COOP';
+for (const language of Object.keys(customerCopy)) Object.assign(copy[language], customerCopy[language]);
 
 const byId = id => document.getElementById(id);
 const storage = {

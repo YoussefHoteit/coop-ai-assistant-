@@ -11,6 +11,7 @@ const [store, chat, storeCSS, chatCSS, storefront, assistant, launcher, worker, 
   readFile(join(root, 'public', 'groceries.jpg'), 'base64'),
 ]);
 const languageHelpers = (await publicText('language.js')).replace(/^export /gm, '');
+const customerHelpers = (await publicText('customer-copy.js')).replace(/^export /gm, '');
 const workerSource = worker.slice(worker.indexOf('const DATA = ')).replace('export default {', 'return {');
 const inline = value => value.replace(/<\/script/gi, '<\\/script');
 const dataImage = 'data:image/jpeg;base64,' + image;
@@ -28,8 +29,9 @@ function inject(document, cssPath, css, code) {
     .replace('</body>', () => '<script type="module">\n' + inline(code) + '\n</script>\n</body>');
 }
 
-const chatApp = languageHelpers + '\n' + assistant
+const chatApp = languageHelpers + '\n' + customerHelpers + '\n' + assistant
   .replace(/^import .* from '\.\/language\.js';\r?\n/m, '')
+  .replace(/^import .* from '\.\/customer-copy\.js';\r?\n/m, '')
   .replaceAll("fetch('/api/", "previewFetch('/api/")
   .replace("const savedLanguage = ", "const savedLanguage = window.name.endsWith('-ar') ? 'ar' : ")
   .replace("const widgetMode = params.get('widget') === '1';", 'const widgetMode = true;')

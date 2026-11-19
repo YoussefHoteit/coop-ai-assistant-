@@ -80,7 +80,7 @@ test('the reported Alfredo recipe is repaired server-side even when the model le
     assert.equal(reply.products.length, 6);
     assert.equal(reply.products.filter(product => product.available === true).length, 5);
     assert.equal(reply.products.find(product => product.id === '179232').available, false);
-    assert.match(reply.text, /sold out/);
+    assert.match(reply.text, /out of stock/);
     assert.doesNotMatch(reply.text, /All ingredients are available/);
     assert.deepEqual(reply.card.items.map(item => item.amount), ['200 g', '30 g', '180 ml', '40 g', 'to taste', 'to taste']);
   } finally { globalThis.fetch = previous; }

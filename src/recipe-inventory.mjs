@@ -44,9 +44,29 @@ export function createRecipeInventory(products, baseSearch, normalize) {
       ['onions', ['onion', 'onions', 'oignons', 'بصل', 'basal']], ['garlic', ['garlic', 'ail', 'ثوم', 'توم', 'toum']],
       ['cucumbers', ['cucumber', 'cucumbers', 'concombre', 'concombres', 'خيار', 'khyar']], ['lettuce', ['lettuce', 'laitue', 'خس', 'khass']],
       ['potatoes', ['potato', 'potatoes', 'pommes de terre', 'بطاطا', 'batata']],
+      ['radish', ['radish', 'radishes', 'red radishes', 'radis', 'فجل', 'fejel']],
     ].map(([key, terms]) => ({ key, terms, accepts: p => category(p, 'produce'), queries: [key] })),
   ].map(profile => ({ ...profile, terms: profile.terms.map(normalize) }));
-  const profileFor = query => profiles.find(profile => profile.terms.includes(normalize(query)));
+  function editDistance(left, right) {
+    let previous = Array.from({ length: right.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= left.length; i++) {
+      const row = [i];
+      for (let j = 1; j <= right.length; j++) row[j] = Math.min(row[j - 1] + 1, previous[j] + 1, previous[j - 1] + Number(left[i - 1] !== right[j - 1]));
+      previous = row;
+    }
+    return previous[right.length];
+  }
+  function profileFor(query) {
+    const value = normalize(query);
+    const exact = profiles.find(profile => profile.terms.includes(value));
+    if (exact) return exact;
+    // Correct short ingredient typos only; never fuzz brands, IDs, full questions or dietary qualifiers.
+    if (!/^[a-z ]{6,32}$/.test(value) || value.split(' ').length > 3) return undefined;
+    const candidates = profiles.flatMap(profile => profile.terms.filter(term => /^[a-z ]{6,32}$/.test(term) && term.slice(0, 3) === value.slice(0, 3) && Math.abs(term.length - value.length) <= 2)
+      .map(term => ({ profile, distance: editDistance(value, term) }))).filter(result => result.distance <= 2).sort((a, b) => a.distance - b.distance);
+    if (!candidates.length || candidates.some(candidate => candidate.distance === candidates[0].distance && candidate.profile !== candidates[0].profile)) return undefined;
+    return candidates[0].profile;
+  }
   const edible = product => [product.category, ...(product.additionalCategories || [])].some(key => food.has(key));
   const cached = new Map();
   function search(query, selectedCategory) {
