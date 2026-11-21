@@ -14,12 +14,21 @@ export const replyLocale = language => language === 'ar' ? 'ar-LB' : language ==
 export function isArabizi(text) {
   if (arabicScript.test(text) || !arabiziWords.test(text)) return false;
   const lexical = text.replace(/\b(?=[a-z0-9]*\d)[a-z0-9]+\b/gi, token => /^(?:bade|baddi|badde|badi|badna)[2356789]/i.test(token) ? 'bade' : '');
-  const otherRequest = /\b(?:do you|how much|how do|what is|which|can you|could you|i need|i want|i would like|are there)\b/i.test(text) || isFrench(text);
+  const otherRequest = /\b(?:do you|how much|how do|what is|which|can you|could you|i need|i want|i would like|are there|help me|give me|show me|make me|cook me)\b/i.test(text) || isFrench(text);
   return !otherRequest || arabiziWords.test(lexical);
+}
+
+function explicitRequestLanguage(text) {
+  const value=text.trim().toLowerCase().normalize('NFKD').replace(/\p{M}/gu,'');
+  if(/^(?:please\s+)?(?:help me|give me|show me|make me|cook me|can you|could you|do you|how (?:do|can|much)|i (?:want|need|would like)|recipe for)\b/.test(value))return'en';
+  if(/^(?:s il vous plait\s+)?(?:je (?:voudrais|veux|souhaite|cherche)|pouvez|pourriez|donnez|donne|montrez|aidez)\b/.test(value))return'fr';
+  return null;
 }
 
 export function detectReplyLanguage(text, recentLanguage = 'en') {
   const recent = replyLanguages.includes(recentLanguage) ? recentLanguage : 'en';
+  const explicit=explicitRequestLanguage(text);
+  if(explicit)return explicit;
   if (arabicScript.test(text)) return 'ar';
   if (isArabizi(text)) return 'arz';
   if (/^merci[.!\s]*$/i.test(text)) return recent === 'arz' ? recent : 'fr';
@@ -29,11 +38,13 @@ export function detectReplyLanguage(text, recentLanguage = 'en') {
 }
 
 export function chooseReplyLanguage(text, recentLanguage, classifiedLanguage) {
+  const explicit=explicitRequestLanguage(text);
+  if(explicit)return explicit;
   const detected = detectReplyLanguage(text, recentLanguage);
   if (/^merci[.!\s]*$/i.test(text)) return detected;
   if (isArabizi(text) || (arabicScript.test(text) && !latinScript.test(text))) return detected;
   if (!arabicScript.test(text) && isFrench(text)) return 'fr';
-  if (!arabicScript.test(text) && /\b(?:how|what|which|can|could|please|recommend|recipe|ingredients|price|write|give|need)\b/i.test(text) && !isArabizi(text)) return 'en';
+  if (!arabicScript.test(text) && /\b(?:how|what|which|can|could|please|recommend|recipe|ingredients|price|write|give|need|help|show|cook|make)\b/i.test(text) && !isArabizi(text)) return 'en';
   return replyLanguages.includes(classifiedLanguage) ? classifiedLanguage : detected;
 }
 

@@ -34,15 +34,19 @@ async function check(name,message,language,history=[],inspect=()=>{}){
 }
 const recipe=(reply,row)=>{assert.equal(reply.card?.kind,'recipe');assert.deepEqual(row.missing,[],'Unresolved ingredient');};
 const first=[
- ['fresh-arabizi-soup','Help me cook shorbet 3adas safra','arz'],
+ ['fresh-english-soup-foreign-name','Help me cook shorbet 3adas safra','en'],
+ ['fresh-arabizi-soup','baddi a3mel shorbet 3adas safra','arz'],
  ['fresh-arabic-stew','بدي أعمل ملوخية لأربعة أشخاص','ar'],
  ['fresh-arabizi-lentils','bade 2e3mal mjadra','arz'],
  ['fresh-french-recipe','Donnez-moi une recette de pâtes Alfredo au poulet pour quatre.','fr'],
  ['fresh-english-recipe','Chicken Alfredo recipe for four please.','en'],
+ ['unseen-english-breakfast','Help me make pancakes for two people.','en'],
+ ['unseen-arabizi-breakfast','baddi a3mel shakshouka la 2','arz'],
+ ['unseen-arabic-breakfast','بدي أعمل عجة خضار لشخصين','ar'],
 ];
 for(let i=0;i<first.length;i+=2)await Promise.all(first.slice(i,i+2).map(([name,message,lang])=>check(name,message,lang,[],recipe)));
 const english=results.find(r=>r.name==='fresh-english-recipe')?.reply;
-if(english&&!english.error){const message=first.at(-1)[1];await check('recipe-context-servings','Make it for 6 people.','en',historyTurn([],message,english),(reply,row)=>{recipe(reply,row);assert.equal(reply.card.servings,6);});}
+if(english&&!english.error){const message=first.find(row=>row[0]==='fresh-english-recipe')[1];await check('recipe-context-servings','Make it for 6 people.','en',historyTurn([],message,english),(reply,row)=>{recipe(reply,row);assert.equal(reply.card.servings,6);});}
 const productMessage='Do you have Aoun rough salt 900g?';
 const product=await check('specific-product',productMessage,'en',[],reply=>{assert.ok(reply.products.some(p=>p.id==='151594'));});
 if(product)await check('context-price-only','How much is it?','en',historyTurn([],productMessage,product),reply=>{assert.equal(reply.priceOnly,true);assert.equal(reply.text,'$0.75');});

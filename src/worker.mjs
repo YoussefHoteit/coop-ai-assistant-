@@ -607,6 +607,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       conversation.push({role:'user',content:'Return a complete valid shopping_reply JSON object using the supplied schema. Keep the scope and language requirements, and use only verified product IDs. The previous response was incomplete or malformed.'});
       continue;
     }
+    if(lang==='arz')reply=normalizeArabiziRemainders(reply);
     if (!replyUsesCorrectScript(reply, lang) || mentionsInternalData(reply)) {
       if (shown) publish('', lang);
       reply=await repairCustomerProse(reply,replyLanguageInstructions[lang],async body=>structuredReply(await requestOpenAI(env,{

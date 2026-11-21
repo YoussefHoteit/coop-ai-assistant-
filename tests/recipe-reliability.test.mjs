@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { repairCustomerProse,recipeAvailabilityProse } from '../src/reply-repair.mjs';
+import { repairCustomerProse,recipeAvailabilityProse,normalizeArabiziRemainders } from '../src/reply-repair.mjs';
 import { replyUsesCorrectScript } from '../public/language.js';
+import {detectReplyLanguage,chooseReplyLanguage}from'../public/language.js';
 import { mentionsInternalData } from '../public/customer-copy.js';
 import worker from '../dist/server/index.js';
 const output=value=>[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}];
@@ -34,6 +35,12 @@ test('Arabizi sound numerals are not mistaken for food quantities during text re
  const texts=[{key:'answer',text:'Hayde el wasfe.'},{key:'name:0',text:'Mal7'},{key:'amount:0',text:'3a zaw2ak'},{key:'name:1',text:'Zeit'},{key:'amount:1',text:'2 ma3ale2 kbar'}];
  const result=await repairCustomerProse(original,'arz',async body=>({texts:JSON.parse(body.input[0].content).requiredTexts.map(({key})=>texts.find(row=>row.key===key))}),value=>replyUsesCorrectScript(value,'arz'));
  assert.equal(result.items[0].amount,'3a zaw2ak');assert.equal(result.items[1].amount,'2 mal3a2a kbar');assert.equal(result.items[1].grams,28);
+});
+
+test('an English sentence inside an Arabizi amount is repaired instead of being left outside the repair slots',async()=>{
+ const original={...answer('Hayde el wasfe.'),items:[{id:'water',name:'Mayy',catalogQuery:'water',amount:'1 L to make the soup',grams:1000}]};
+ const result=await repairCustomerProse(original,'arz',async body=>{const slots=JSON.parse(body.input[0].content).requiredTexts;assert.deepEqual(slots.map(s=>s.key),['amount:0']);return{texts:[{key:'amount:0',text:'1 L lal shorbe'}]};},value=>replyUsesCorrectScript(value,'arz'));
+ assert.equal(result.items[0].amount,'1 L lal shorbe');assert.equal(result.items[0].grams,1000);
 });
 
 test('the first recipe request avoids serial lookup calls and ingredient names cannot become seasoning types',async()=>{
@@ -96,4 +103,19 @@ test('post-match recipe prose cannot contradict verified stock and retains genui
  const allergy='We could not find allergen label information, so we cannot guarantee peanut safety.';
  assert.equal(recipeAvailabilityProse(allergy,'en',true),allergy);
  assert.doesNotMatch(recipeAvailabilityProse('We could not find the salt.','en',true),/could not find/);
+});
+
+test('English request wording takes precedence over a numeral inside a foreign dish name',()=>{
+ for(const message of ['Help me cook shorbet 3adas safra','Give me a recipe for mlo5iye','Show me a recipe for 3adas'])assert.equal(detectReplyLanguage(message,'arz'),'en');
+ assert.equal(chooseReplyLanguage('Help me cook shorbet 3adas safra','arz','arz'),'en');
+ assert.equal(detectReplyLanguage('Help me cook مجدرة','ar'),'en');
+ assert.equal(detectReplyLanguage('Je voudrais faire ملوخية','ar'),'fr');
+ for(const message of ['baddi a3mel shorbet 3adas safra','bade 2e3mal mjadra'])assert.equal(detectReplyLanguage(message,'en'),'arz');
+});
+
+test('small Arabic-script remainders in Arabizi do not discard an otherwise valid recipe',()=>{
+ const input={...answer('Hayde el wasfe.'),recipe:{title:'Shorbe',servings:4,steps:['Khalliha 3a نار hadiye la testawe mni7.']},items:[{id:'x',name:'Mal7',amount:'2 رشة',grams:1}]};
+ const fixed=normalizeArabiziRemainders(input);
+ assert.equal(replyUsesCorrectScript(fixed,'arz'),true);assert.match(fixed.recipe.steps[0],/nar/);assert.equal(fixed.items[0].amount,'2 rshe');assert.equal(fixed.items[0].grams,1);
+ const arabic=answer('اغسل الخضار جيداً ثم قطّعها وأضفها إلى الطنجرة.');assert.equal(normalizeArabiziRemainders(arabic).answer,arabic.answer,'Full Arabic sentences must go through real translation');
 });

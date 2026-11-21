@@ -1,5 +1,20 @@
 // Localize customer prose independently of inventory retrieval. Product identities, stock,
 // prices, recipe quantities, servings and preparation order remain under the caller's control.
+export function normalizeArabiziRemainders(reply) {
+  const letters={'ا':'a','أ':'a','إ':'i','آ':'a','ء':'2','ؤ':'2','ئ':'2','ع':'3','ح':'7','خ':'kh','غ':'gh','ق':'2','ش':'sh','ث':'t','ذ':'z','ظ':'z','ص':'s','ض':'d','ط':'t','ج':'j','ر':'r','ز':'z','س':'s','د':'d','ت':'t','ب':'b','ن':'n','م':'m','ف':'f','ك':'k','ل':'l','ه':'h','و':'w','ي':'y','ى':'a','ة':'e','پ':'p','چ':'ch','گ':'g','ژ':'zh','ڤ':'v','َ':'a','ِ':'i','ُ':'u','ً':'an','ٍ':'in','ٌ':'un','ْ':'','ّ':''};
+  const convert=text=>{
+    if(typeof text!=='string')return text;
+    const arabic=[...text].filter(c=>/(?=\p{L})\p{Script=Arabic}/u.test(c)).length;
+    const latin=[...text].filter(c=>/\p{Script=Latin}/u.test(c)).length;
+    // Full Arabic sentences need translation. Only convert small inline leftovers or
+    // short labels in an otherwise Arabizi answer; this changes script, not ingredients.
+    if(!arabic||arabic>Math.max(4,latin/4))return text;
+    return [...text].map(c=>Object.hasOwn(letters,c)?letters[c]:c).join('');
+  };
+  return {...reply,answer:convert(reply.answer),recipe:reply.recipe?{...reply.recipe,title:convert(reply.recipe.title),steps:reply.recipe.steps.map(convert)}:null,
+    items:reply.items.map(item=>({...item,name:convert(item.name),amount:convert(item.amount)}))};
+}
+
 export async function repairCustomerProse(reply, language, request, validate) {
   const arabizi=/^(?:arz$|Arabizi:)/i.test(language);
   let slots = [{ key:'answer', text:reply.answer || '' }];
@@ -11,7 +26,7 @@ export async function repairCustomerProse(reply, language, request, validate) {
     if (typeof item.name==='string') slots.push({key:'name:'+index,text:item.name});
     // Latin-script amounts already work in Arabizi. Keep their numeric and unit spelling
     // untouched rather than asking a language rewrite to restate spoon/count quantities.
-    if (typeof item.amount==='string'&&(!arabizi||/(?=\p{L})\p{Script=Arabic}/u.test(item.amount))) slots.push({key:'amount:'+index,text:item.amount});
+    if (typeof item.amount==='string'&&(!arabizi||!validate({answer:'',recipe:null,items:[{amount:item.amount}]}))) slots.push({key:'amount:'+index,text:item.amount});
   });
   const fragment=(key,text)=>key.startsWith('name:')?{answer:'',recipe:null,items:[{name:text}]}:
     key.startsWith('amount:')?{answer:'',recipe:null,items:[{amount:text}]}:{answer:text,recipe:null,items:[]};
@@ -31,8 +46,9 @@ export async function repairCustomerProse(reply, language, request, validate) {
     if (!Array.isArray(output?.texts) || output.texts.length!==slots.length) {failure='repair_shape';continue;}
     const texts=new Map(output.texts.map(row=>[row.key,row.text]));
     if (texts.size!==slots.length || slots.some(row=>typeof texts.get(row.key)!=='string')) {failure='repair_keys';continue;}
-    const candidate={...reply,answer:texts.has('answer')?texts.get('answer'):reply.answer,recipe:reply.recipe?{...reply.recipe,title:texts.get('title')??reply.recipe.title,steps:reply.recipe.steps.map((step,i)=>texts.get('step:'+i)??step)}:null,
+    let candidate={...reply,answer:texts.has('answer')?texts.get('answer'):reply.answer,recipe:reply.recipe?{...reply.recipe,title:texts.get('title')??reply.recipe.title,steps:reply.recipe.steps.map((step,i)=>texts.get('step:'+i)??step)}:null,
       items:reply.items.map((item,i)=>({...item,...(texts.has('name:'+i)&&{name:texts.get('name:'+i)}),...(texts.has('amount:'+i)&&{amount:texts.get('amount:'+i)})}))};
+    if(arabizi)candidate=normalizeArabiziRemainders(candidate);
     // Quantities are immutable. A repair that changes a numeric amount must be retried.
     const numbers=text=>[...String(text).normalize('NFKC').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
       .matchAll(/(?:^|[^\p{L}\p{N}])(\d+(?:[.,]\d+)?)(?=$|[^\p{L}\p{N}]|(?:kg|gr|g|ml|cl|l|oz|lb)\b)/giu)].map(match=>match[1].replace(',','.')).join('|');
