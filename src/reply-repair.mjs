@@ -26,7 +26,8 @@ export async function repairCustomerProse(reply, language, request, validate) {
     const candidate={...reply,answer:texts.get('answer'),recipe:reply.recipe?{...reply.recipe,title:texts.get('title'),steps:reply.recipe.steps.map((_,i)=>texts.get('step:'+i))}:null,
       items:reply.items.map((item,i)=>({...item,...(typeof item.name==='string'&&{name:texts.get('name:'+i)}),...(typeof item.amount==='string'&&{amount:texts.get('amount:'+i)})}))};
     // Quantities are immutable. A repair that changes a numeric amount must be retried.
-    const numbers=text=>String(text).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).match(/\d+(?:[.,]\d+)?/g)?.join('|')||'';
+    const numbers=text=>[...String(text).normalize('NFKC').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+      .matchAll(/(?:^|[^\p{L}\p{N}])(\d+(?:[.,]\d+)?)(?=$|[^\p{L}\p{N}]|(?:kg|gr|g|ml|cl|l|oz|lb)\b)/giu)].map(match=>match[1].replace(',','.')).join('|');
     if (reply.items.some((item,i)=>numbers(item.amount)!==numbers(candidate.items[i].amount))) continue;
     if (validate(candidate)) return candidate;
   }
