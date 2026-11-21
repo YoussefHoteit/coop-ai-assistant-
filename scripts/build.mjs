@@ -7,6 +7,7 @@ const project = fileURLToPath(new URL('../', import.meta.url));
 const staticFiles = {
   'index.html': 'text/html; charset=utf-8',
   'assistant.html': 'text/html; charset=utf-8',
+  'shopping-list.html': 'text/html; charset=utf-8',
   'store.css': 'text/css; charset=utf-8',
   'store.js': 'text/javascript; charset=utf-8',
   'widget-preview.html': 'text/html; charset=utf-8',
@@ -19,6 +20,12 @@ const staticFiles = {
   'widget.js': 'text/javascript; charset=utf-8',
   'groceries.jpg': 'image/jpeg',
 };
+
+// Deliver the separate list in its final layout before any JavaScript runs.
+const listPage = (await readFile(join(project, 'public', 'assistant.html'), 'utf8'))
+  .replace('<html lang="en" dir="ltr">', '<html lang="en" dir="ltr" class="list-only" data-view="list">')
+  .replace('<body>', '<body class="list-only show-list">');
+await writeFile(join(project, 'public', 'shopping-list.html'), listPage);
 
 const entries = await Promise.all(Object.entries(staticFiles).map(async ([file, type]) => {
   const binary = type.startsWith('image/');

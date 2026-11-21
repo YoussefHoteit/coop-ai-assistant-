@@ -38,7 +38,7 @@ try{
   await frame.locator('.quantity-stepper button').nth(1).click();
   const after=await frame.locator('#list-total').innerText();assert.notEqual(after,before);
   await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('#list-total').innerText(),before);
-  await frame.locator('#tab-recipe').click();assert.ok((await frame.locator('.group-title').allTextContents()).some(t=>/tabbouleh/i.test(t)));
+  assert.equal(await frame.locator('#tab-recipe,#tab-all').count(),0,'Only the all-items view remains');
   const count=await frame.locator('.list-item').count();
   await frame.locator('.remove-button').first().click();assert.equal(await frame.locator('.list-item').count(),count-1);
   await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('.list-item').count(),count);
@@ -46,8 +46,7 @@ try{
   const bounds=await frame.locator('body').evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,buttons:[...document.querySelectorAll('#list-close,#continue-chat,#copy')].map(e=>({id:e.id,rect:e.getBoundingClientRect().toJSON()})),height:innerHeight}));
   assert.ok(bounds.scroll<=bounds.width+1,`No horizontal overflow: ${JSON.stringify(bounds)}`);
   for(const e of bounds.buttons.filter(e=>e.rect.height)) assert.ok(e.rect.bottom<=bounds.height+1&&e.rect.x>=0,`Visible list control ${e.id}: ${JSON.stringify(bounds)}`);
-  await frame.locator('#copy').click();
-  if(await frame.locator('#dialog').evaluate(e=>e.open))await frame.locator('#close-dialog').click();
+  assert.equal(await frame.locator('#copy').count(),0,'No control exports protected interface text');
   await frame.locator('#clear-list').click();assert.equal(await frame.locator('.list-item').count(),0);
   await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('.list-item').count(),count);
   await frame.locator('#continue-chat').click();

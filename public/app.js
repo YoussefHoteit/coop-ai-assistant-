@@ -80,7 +80,7 @@ const savedLanguage = params.get('lang') || storage.read('makhazen-language', 'e
 const savedList = storage.read('makhazen-list-v1', []);
 let lang = ['en','ar','arz','fr'].includes(savedLanguage) ? savedLanguage : 'en';
 const widgetMode = params.get('widget') === '1';
-const listOnly = params.get('list') === '1' || window.name.startsWith('makhazen-list-');
+const listOnly = document.documentElement.dataset.view === 'list' || params.get('list') === '1' || window.name.startsWith('makhazen-list-');
 const parentOrigin = params.get('parent') || window.location.origin;
 if (widgetMode) document.body.classList.add('widget-mode');
 if (listOnly) document.body.classList.add('list-only');
@@ -100,7 +100,6 @@ let activeRequest;
 let replyPreview;
 let toastTimeout;
 let dialogKind;
-let groupMode = 'all';
 
 const getText = (key, language = lang) => (copy[language] || copy.en)[key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
@@ -153,7 +152,7 @@ function setLanguage() {
   document.querySelector('.send').setAttribute('aria-label', getText('send'));
   byId('mode-label').textContent = getText(catalog?.mode === 'ai' ? 'ai' : 'demo');
   document.querySelector('.chat-note').textContent = 'COOP · ' + getText('ready');
-  for (const [id, key] of [['tab-all','allItems'],['tab-recipe','byRecipe'],['clear-list','clear'],['total-label','estimated'],['continue-chat','done'],['list-title','list']]) byId(id).textContent = getText(key);
+  for (const [id, key] of [['clear-list','clear'],['total-label','estimated'],['continue-chat','done'],['list-title','list']]) byId(id).textContent = getText(key);
   if (listOnly) byId('continue-chat').textContent = getText('close');
   renderChat();
   renderList();
@@ -571,13 +570,13 @@ function renderList() {
   byId('list-total').textContent = price(summary.total);
   byId('pack-count').textContent = localizedNumber(summary.quantity) + ' ' + getText('packs');
   byId('price-note').textContent = [summary.unpriced ? getText('unknownPrices') : '',summary.unavailable ? getText('unavailableItems') : ''].filter(Boolean).join(' · ');
-  byId('copy').disabled = byId('clear-list').disabled = !entries.length;
+  byId('clear-list').disabled = !entries.length;
   if (!entries.length) {
     const empty = element('div','empty-list'); const graphic = element('span','empty-icon'); graphic.append(icon('basket'));
     empty.append(graphic,element('strong','',getText('empty')),element('p','',getText('emptyInfo'))); body.replaceChildren(empty); return;
   }
   const sections = [];
-  for (const group of groupShoppingEntries(entries,groupMode)) {
+  for (const group of groupShoppingEntries(entries)) {
     const section = element('section','list-group');
     const label = ({__all:'allGroup',__other:'other',__shared:'shared'})[group.label];
     section.append(element('h3','group-title',label ? getText(label) : group.label));
@@ -742,30 +741,6 @@ function showToast(text, undo) {
   toastTimeout = window.setTimeout(()=>{toast.hidden=true;},undo ? 6500 : 3000);
 }
 
-async function copyList() {
-  const summary = basketSummary([...list.values()],products);
-  const content = [...list.values()].map(item => {
-    const product=products.get(item.id)||item;
-    return (item.checked ? '✓ ' : '• ') + (product.name?.[lang]||product.name?.en||item.id) + ' × ' + packQuantity(item,product) + (Number.isFinite(product.price) ? ' — '+price(product.price*packQuantity(item,product)) : '');
-  }).join('\n') + '\n\n' + getText('estimated') + ': ' + price(summary.total);
-  if (!content) return;
-  try {
-    await navigator.clipboard.writeText(content);
-    showToast(getText('copied'));
-  } catch {
-    const field = element('textarea', 'catalog-search');
-    field.value = content;
-    field.readOnly = true;
-    field.rows = 8;
-    const dialog = byId('dialog');
-    dialogKind = 'copy';
-    byId('dialog-title').textContent = getText('list');
-    byId('dialog-content').replaceChildren(field);
-    dialog.showModal();
-    field.select();
-  }
-}
-
 async function openBrowse(kind) {
   const dialog = byId('dialog');
   const content = byId('dialog-content');
@@ -858,6 +833,16 @@ document.querySelectorAll('[data-action]').forEach(node => node.addEventListener
 }));
 byId('menu').addEventListener('click', () => toggleMenu(!byId('sidebar').classList.contains('open')));
 byId('shade').addEventListener('click', () => toggleMenu(false));
+function editableTarget(target) {
+  return target instanceof Element && Boolean(target.closest('input,textarea,[contenteditable="true"]'));
+}
+for (const type of ['copy','cut','selectstart','dragstart','contextmenu','paste']) {
+  document.addEventListener(type,event=>{ if (!editableTarget(event.target)) event.preventDefault(); });
+}
+document.addEventListener('keydown',event=>{
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editableTarget(event.target)) event.preventDefault();
+});
+
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
   if (listOnly) { if (!byId('dialog').open) closeEmbedded('makhazen-close-list'); return; }
@@ -872,15 +857,11 @@ document.addEventListener('keydown', event => {
 });
 byId('new-chat').addEventListener('click', resetChat);
 byId('reset').addEventListener('click', resetChat);
-byId('copy').addEventListener('click', copyList);
 byId('close-dialog').addEventListener('click', () => byId('dialog').close());
 byId('list-toggle').addEventListener('click',()=>setListOpen(!document.body.classList.contains('show-list')));
 byId('list-close').addEventListener('click',()=>listOnly ? closeEmbedded('makhazen-close-list') : setListOpen(false));
 byId('continue-chat').addEventListener('click',()=>{if (listOnly) closeEmbedded('makhazen-close-list'); else {setListOpen(false);focusChat();}});
 byId('clear-list').addEventListener('click',()=>updateList(()=>list.clear(),getText('cleared')));
-for (const [id,mode] of [['tab-all','all'],['tab-recipe','recipe']]) byId(id).addEventListener('click',()=>{
-  groupMode=mode; byId('tab-all').setAttribute('aria-pressed',String(mode==='all')); byId('tab-recipe').setAttribute('aria-pressed',String(mode==='recipe')); renderList();
-});
 byId('shopping-list').inert = true;
 byId('widget-close').addEventListener('click', () => closeEmbedded('makhazen-close-widget'));
 byId('composer').addEventListener('submit', event => {

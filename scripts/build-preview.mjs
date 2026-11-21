@@ -52,7 +52,7 @@ const launcherScript = launcher
   .replace("image.src=origin+'/coop-mark.svg'", 'image.src='+JSON.stringify(markImage))
   .replace("event.origin!==origin||event.source!==iframe.contentWindow", "event.source !== iframe.contentWindow");
 const storefrontScript = shoppingHelpers + '\n' + storefront.replace(/^import .* from '\.\/shopping\.js';\r?\n/m, '')
-  .replace("if (!listFrame.hasAttribute('src')) listFrame.src = '/assistant.html?list=1&parent=' + encodeURIComponent(location.origin);", "if (!listFrame.hasAttribute('srcdoc')) { listFrame.name = 'makhazen-list-en'; listFrame.srcdoc = previewChat.replace('const listOnly = ', 'const listOnly = true || '); }")
+  .replace("if (!listFrame.hasAttribute('src')) listFrame.src = '/shopping-list.html?parent=' + encodeURIComponent(location.origin);", "if (!listFrame.hasAttribute('srcdoc')) { listFrame.name = 'makhazen-list-en'; listFrame.srcdoc = previewChat.replace('<html lang=\"en\" dir=\"ltr\">', '<html lang=\"en\" dir=\"ltr\" class=\"list-only\" data-view=\"list\">').replace('<body>', '<body class=\"list-only show-list\">'); }")
   .replaceAll("},location.origin);", "},'*');")
   .replaceAll("fetch('/api/", "previewFetch('/api/")
   .replace("image.src = category.image;", "image.src = category.image === '/groceries.jpg' ? previewImage : category.image;");

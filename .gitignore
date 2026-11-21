@@ -1,4 +1,5 @@
 dist/
+public/shopping-list.html
 .env
 .env.*
 !.env.example

@@ -82,7 +82,7 @@ window.addEventListener('message',event=>{
 listFrame.addEventListener('load',()=>listFrame.contentWindow.postMessage({type:'makhazen-sync-list'},location.origin));
 byId('store-basket').addEventListener('click', () => {
   window.dispatchEvent(new Event('makhazen:close'));
-  if (!listFrame.hasAttribute('src')) listFrame.src = '/assistant.html?list=1&parent=' + encodeURIComponent(location.origin);
+  if (!listFrame.hasAttribute('src')) listFrame.src = '/shopping-list.html?parent=' + encodeURIComponent(location.origin);
   if (!listDialog.open) listDialog.showModal();
   listFrame.contentWindow.postMessage({type:'makhazen-sync-list'},location.origin);
 });

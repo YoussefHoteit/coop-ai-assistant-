@@ -2,6 +2,8 @@
 <html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
+  <script>if(new URLSearchParams(location.search).get('list')==='1')document.documentElement.classList.add('list-only');</script>
+  <style>html.list-only .chat,html.list-only .sidebar,html.list-only .topbar,html.list-only .hero{display:none!important}html.list-only .list-panel{display:flex;position:static;height:100%}</style>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Try the Al Makhazen shopping assistant. Find groceries and turn Lebanese recipes into a shopping list.">
   <meta name="theme-color" content="#f7f8f3">
@@ -86,9 +88,9 @@
           </section>
           <section class="panel list-panel" id="shopping-list" aria-labelledby="list-title" tabindex="-1">
             <header class="panel-header list-header"><span class="panel-icon"><svg><use href="#i-basket"/></svg></span><div><h2 id="list-title">Your shopping list</h2><p id="list-count" aria-live="polite">0 items</p></div><button class="icon-button" id="list-close" aria-label="Close shopping list"><svg><use href="#i-close"/></svg></button></header>
-            <div class="list-toolbar"><div class="list-tabs" role="group" aria-label="Group shopping list"><button id="tab-all" aria-pressed="true">All items</button><button id="tab-recipe" aria-pressed="false">By recipe</button></div><button class="text-button" id="clear-list" disabled>Clear list</button></div>
+            <div class="list-toolbar"><span class="list-view-label" data-text="allItems">All items</span><button class="text-button" id="clear-list" disabled>Clear list</button></div>
             <div class="list-body" id="list-body"></div>
-            <footer class="list-footer"><div class="total-row"><div><span id="total-label">Estimated total</span><small id="pack-count">0 packs</small></div><strong id="list-total">$0.00</strong></div><p class="price-note" id="price-note"></p><button class="primary" id="continue-chat">Continue chatting<svg><use href="#i-arrow"/></svg></button><button class="copy-button" id="copy" disabled><svg><use href="#i-copy"/></svg><span data-text="copy">Copy list</span></button></footer>
+            <footer class="list-footer"><div class="total-row"><div><span id="total-label">Estimated total</span><small id="pack-count">0 packs</small></div><strong id="list-total">$0.00</strong></div><p class="price-note" id="price-note"></p><button class="primary" id="continue-chat">Continue chatting<svg><use href="#i-arrow"/></svg></button></footer>
           </section>
         </div>
       </main>

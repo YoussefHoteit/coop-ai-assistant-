@@ -6,10 +6,11 @@
   if (document.querySelector(tag)) return;
   const host = document.createElement(tag);
   const shadow = host.attachShadow({mode:'open'});
+  for (const type of ['copy','cut','paste','selectstart','dragstart','contextmenu']) shadow.addEventListener(type,event=>event.preventDefault());
   const style = document.createElement('style');
   style.textContent = `
     :host{position:fixed;right:max(22px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));z-index:2147483000;font:600 14px system-ui,sans-serif}
-    button{display:flex;align-items:center;gap:11px;margin-inline-start:auto;padding:7px 20px 7px 7px;border:1px solid #ffffff90;border-radius:22px;background:#fffdf7;color:#59352a;box-shadow:0 8px 35px #532b2430;cursor:pointer;font:inherit;min-height:64px}
+    button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;display:flex;align-items:center;gap:11px;margin-inline-start:auto;padding:7px 20px 7px 7px;border:1px solid #ffffff90;border-radius:22px;background:#fffdf7;color:#59352a;box-shadow:0 8px 35px #532b2430;cursor:pointer;font:inherit;min-height:64px}
     button:focus-visible{outline:3px solid #408561;outline-offset:4px}.mark{position:relative;display:flex}.mark img{width:48px;height:48px;border-radius:16px}.mark:after{content:'';position:absolute;width:9px;height:9px;border:3px solid #fffdf7;border-radius:50%;background:#4d9863;right:-3px;bottom:-2px}
     .label{display:flex;flex-direction:column;gap:3px;text-align:left}.label strong{font-size:15px}.label small{font-size:10px;font-weight:400;color:#8d877a}
     button:hover{transform:translateY(-2px)}button svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8}button .close{display:none}
