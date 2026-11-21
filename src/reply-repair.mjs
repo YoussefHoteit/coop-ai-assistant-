@@ -45,3 +45,13 @@ export async function repairCustomerProse(reply, language, request, validate) {
   }
   throw Object.assign(new Error('Customer prose repair failed.'),{code:failure,fields});
 }
+
+// A model can describe its pre-resolution uncertainty after the server has matched
+// those same ingredients. Keep verified product state authoritative in the final prose.
+export function recipeAvailabilityProse(answer,language,allAvailable) {
+  if(!allAvailable)return answer;
+  const doubt=/couldn.t find|could not find|can.t find|availability.{0,30}unconfirmed|not sure.{0,100}(?:available|stock)|(?:ma fi ta2kid|mish m2akkad|mesh m2akkad|mish m2akad).{0,140}(?:mawjoud|mawjoudeen|tawaffor)|pas pu trouver|disponibilit.{0,40}(?:incertaine|non confirm)|(?:مش متأكد|غير مؤكد).{0,100}(?:متوفر|موجود)|لم أتمكن من العثور/iu;
+  // Preserve label/allergen warnings; availability cannot establish allergen safety.
+  if(!doubt.test(answer)||/allergen|allerg|label|étiquette|arachide|gluten|lactose|حساس|ملصق|7asasi/i.test(answer))return answer;
+  return {en:'Here is the recipe, with the ingredients and quantities below.',ar:'هذه الوصفة مع المكونات والكميات أدناه.',arz:'Hayde el wasfe, w el mokawwenet ma3 el kammiyet ta7t.',fr:'Voici la recette, avec les ingrédients et les quantités ci-dessous.'}[language]||answer;
+}

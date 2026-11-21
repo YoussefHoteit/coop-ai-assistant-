@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { repairCustomerProse } from '../src/reply-repair.mjs';
+import { repairCustomerProse,recipeAvailabilityProse } from '../src/reply-repair.mjs';
 import { replyUsesCorrectScript } from '../public/language.js';
 import { mentionsInternalData } from '../public/customer-copy.js';
 import worker from '../dist/server/index.js';
@@ -85,4 +85,15 @@ test('product fallback cannot replace an allergen warning or informational answe
  const previous=fetch;let calls=0;
  globalThis.fetch=async()=>{if(++calls===1)return Response.json({output:output(decision('en',{intent:'products',englishRequest:'Can you guarantee peanut-free chocolate?',queries:['chocolate']}))});return Response.json({output:output(answer('We cannot guarantee this without checking the product label and manufacturer allergen information.'))});};
  try{const reply=await replyFor('Can you guarantee the chocolate products are completely peanut-free?');assert.equal(reply.mode,'ai');assert.match(reply.text,/cannot guarantee/);assert.equal(reply.card,null);assert.equal(calls,2);}finally{globalThis.fetch=previous;}
+});
+
+test('post-match recipe prose cannot contradict verified stock and retains genuine label or variety warnings',()=>{
+ const warning='Ma fi ta2kid iza l mele7, l felefel w l mayy mawjoudeen.';
+ assert.doesNotMatch(recipeAvailabilityProse(warning,'arz',true),/ta2kid/);
+ assert.equal(recipeAvailabilityProse(warning,'arz',false),warning);
+ const variety='El 3adas el motawaffir howwe 3adas 7abbet kamle, mesh m2akkad eno nafs no3 el 3adas el asmar.';
+ assert.equal(recipeAvailabilityProse(variety,'arz',true),variety);
+ const allergy='We could not find allergen label information, so we cannot guarantee peanut safety.';
+ assert.equal(recipeAvailabilityProse(allergy,'en',true),allergy);
+ assert.doesNotMatch(recipeAvailabilityProse('We could not find the salt.','en',true),/could not find/);
 });

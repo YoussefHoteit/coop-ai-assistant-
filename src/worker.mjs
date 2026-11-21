@@ -317,6 +317,7 @@ const scopeSchema = {
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
 
 const rules = [
+  'For recipes, keep answer about the dish, useful preparation notes, explicit adaptations or budget. Do not narrate missing matches or uncertain stock just because an ingredient ID is null: the server resolves every ingredient afterwards and adds verified availability notes itself. Keep genuine allergy/label warnings when relevant.',
   'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
   'You are the Al Makhazen COOP shopping assistant for its complete multi-department catalog. Follow the response language specified below for the entire reply, including recipe titles, steps, ingredients and quantities. Retain original brand names or foreign terms only when they clarify the answer.',
   'Keep the reply strictly within COOP shopping, all retail products and services, shopping lists, product bundles, recipes and food information. Electronics, car chargers, socks and seasonal clothing, stationery, pens, pencils, backpacks, pencil cases, toys, household goods, baby care, personal care and pet supplies are fully in scope. Product lookup requests remain in scope even when no matching product is found. Allow short greetings and relevant follow-ups.',
@@ -648,7 +649,8 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       nutrition: calculateRecipeEnergy(matches, recipe.servings) } : matchedProducts.length ? { kind: 'products', items: matchedProducts } : null;
     const hasUnconfirmedIngredient = validRecipe && matches.some(item => productsById.get(item.id)?.available !== true);
     const availabilityNote = matches.some(item => !item.id) ? customerMessages[lang].missingRecipe : customerMessages[lang].soldOutRecipe;
-    const text = hasUnconfirmedIngredient ? availabilityNote + ' ' + recipeAdaptationPrompt[lang] : plainReplyText(answer).slice(0, 4000);
+    const text = hasUnconfirmedIngredient ? availabilityNote + ' ' + recipeAdaptationPrompt[lang] :
+      recipeAvailabilityProse(plainReplyText(answer).slice(0,4000),lang,Boolean(validRecipe));
     if (!text && !card) throw new Error('The model did not return a usable reply.');
     return { text, card };
   }
