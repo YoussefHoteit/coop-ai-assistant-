@@ -26,14 +26,14 @@ test('invalid repair keys and changed numeric quantities are rejected within the
  const original={...answer('Hello'),items:[{id:'x',name:'Rice',amount:'200 g',grams:200}]};let calls=0;
  const result=await repairCustomerProse(original,'en',async()=>({texts:[{key:'answer',text:'Hello'},{key:'name:0',text:'Rice'},{key:'amount:0',text:++calls===1?'20 g':'200 g'}]}),()=>true);
  assert.equal(calls,2);assert.equal(result.items[0].amount,'200 g');
- await assert.rejects(repairCustomerProse(original,'en',async()=>({texts:[{key:'answer',text:'One'},{key:'answer',text:'Two'},{key:'answer',text:'Three'}]}),()=>true),e=>e.code==='reply_language');
+ await assert.rejects(repairCustomerProse(original,'en',async()=>({texts:[{key:'answer',text:'One'},{key:'answer',text:'Two'},{key:'answer',text:'Three'}]}),()=>true),e=>e.code==='repair_keys');
 });
 
 test('Arabizi sound numerals are not mistaken for food quantities during text repair',async()=>{
  const original={...answer('Recipe'),items:[{id:'salt',name:'ملح',amount:'حسب الذوق',grams:null},{id:'oil',name:'زيت',amount:'2 mal3a2a kbar',grams:28}]};
  const texts=[{key:'answer',text:'Hayde el wasfe.'},{key:'name:0',text:'Mal7'},{key:'amount:0',text:'3a zaw2ak'},{key:'name:1',text:'Zeit'},{key:'amount:1',text:'2 ma3ale2 kbar'}];
- const result=await repairCustomerProse(original,'arz',async()=>({texts}),value=>replyUsesCorrectScript(value,'arz'));
- assert.equal(result.items[0].amount,'3a zaw2ak');assert.equal(result.items[1].amount,'2 ma3ale2 kbar');assert.equal(result.items[1].grams,28);
+ const result=await repairCustomerProse(original,'arz',async body=>({texts:JSON.parse(body.input[0].content).requiredTexts.map(({key})=>texts.find(row=>row.key===key))}),value=>replyUsesCorrectScript(value,'arz'));
+ assert.equal(result.items[0].amount,'3a zaw2ak');assert.equal(result.items[1].amount,'2 mal3a2a kbar');assert.equal(result.items[1].grams,28);
 });
 
 test('the first recipe request avoids serial lookup calls and ingredient names cannot become seasoning types',async()=>{
