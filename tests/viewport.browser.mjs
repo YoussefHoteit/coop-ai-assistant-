@@ -14,10 +14,12 @@ try{
   await page.evaluate(()=>scrollTo(0,320));const initial=await page.evaluate(()=>({y:scrollY,body:document.body.getAttribute('style'),overflow:document.documentElement.style.overflow}));assert.ok(initial.y>0);
   const trigger=page.locator('al-makhazen-assistant-widget button'),iframe=page.locator('al-makhazen-assistant-widget iframe'),frame=page.frameLocator('al-makhazen-assistant-widget iframe');
   await trigger.click();await frame.locator('.welcome').waitFor();
-  assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed');assert.equal(await page.locator('al-makhazen-assistant-widget').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed');assert.equal(await page.locator('al-makhazen-assistant-widget').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)');
   const expectGeometry=async({top=0,left=0,width:expectedWidth=width,height:expectedHeight})=>{
-   await page.waitForFunction(({top,left,width,height})=>{const box=document.querySelector('al-makhazen-assistant-widget').shadowRoot.querySelector('iframe').getBoundingClientRect();return Math.abs(box.top-top)<=1&&Math.abs(box.left-left)<=1&&Math.abs(box.width-width)<=1&&Math.abs(box.height-height)<=1;},{top,left,width:expectedWidth,height:expectedHeight});
-   const box=await iframe.boundingBox();for(const[key,value]of Object.entries({x:left,y:top,width:expectedWidth,height:expectedHeight}))assert.ok(Math.abs(box[key]-value)<=1,`Frame ${key}: ${box[key]} versus ${value}`);
+   await page.waitForFunction(({top,left,width,height})=>{const box=document.querySelector('al-makhazen-assistant-widget').shadowRoot.querySelector('iframe').getBoundingClientRect();return box.top>top&&box.left>left&&box.right<left+width&&box.bottom<top+height&&box.height>=height*.8;},{top,left,width:expectedWidth,height:expectedHeight});
+   const box=await iframe.boundingBox();assert.ok(box.x>=left+11&&box.x+box.width<=left+expectedWidth-11,'Website remains visible at both sides');assert.ok(box.y>top&&box.y+box.height<top+expectedHeight,'Website remains visible above and below chat');
+   assert.ok(box.height>=expectedHeight*.8&&box.height<expectedHeight,'Chat uses most of the usable viewport without filling it');
+   assert.equal(await iframe.evaluate(e=>parseFloat(getComputedStyle(e).borderRadius)),24);
    const metrics=await frame.locator('body').evaluate(()=>({viewport:innerHeight,scroll:document.scrollingElement.scrollHeight,scrollTop:document.scrollingElement.scrollTop,width:innerWidth,scrollWidth:document.documentElement.scrollWidth}));
    assert.equal(metrics.scrollTop,0);assert.ok(metrics.scroll<=metrics.viewport+1,JSON.stringify(metrics));assert.ok(metrics.scrollWidth<=metrics.width+1,JSON.stringify(metrics));
   };
@@ -47,9 +49,9 @@ try{
   await list.locator('#list-close').tap();await page.locator('#store-dialog').waitFor({state:'hidden'});await page.waitForFunction(()=>getComputedStyle(document.body).position==='static');assert.equal(await page.evaluate(()=>scrollY),listScroll);
   assert.equal(errors.length,0,errors.join('\n'));console.log('PASS scroll lock, toolbar/keyboard geometry, pane boundaries and restoration',width,height);await context.close();
  }
- // A real layout resize must also switch cleanly between desktop and fullscreen modes.
+ // A real layout resize must also switch cleanly between desktop and floating mobile modes.
  const page=await browser.newPage({viewport:{width:1440,height:900}});await page.route('https://**/*',r=>r.abort());await page.goto('http://127.0.0.1:4173/');await page.evaluate(()=>scrollTo(0,250));
  await page.locator('al-makhazen-assistant-widget button').click();const frame=page.frameLocator('al-makhazen-assistant-widget iframe');await frame.locator('.welcome').waitFor();assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'static');
- for(const viewport of [{width:390,height:844},{width:844,height:390},{width:390,height:660}]){await page.setViewportSize(viewport);await page.waitForTimeout(70);const box=await page.locator('al-makhazen-assistant-widget iframe').boundingBox();assert.equal(Math.round(box.width),viewport.width);assert.equal(Math.round(box.height),viewport.height);assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed');}
+ for(const viewport of [{width:390,height:844},{width:844,height:390},{width:390,height:660}]){await page.setViewportSize(viewport);await page.waitForTimeout(70);const box=await page.locator('al-makhazen-assistant-widget iframe').boundingBox();assert.ok(box.width<=viewport.width-24&&box.height<viewport.height,'Floating margins survive rotation');assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'fixed');}
  await page.setViewportSize({width:1440,height:900});await page.waitForTimeout(70);assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'static');await frame.locator('#widget-close').click();await page.close();console.log('PASS desktop/mobile rotation and resize transitions');
 }finally{await browser.close();}

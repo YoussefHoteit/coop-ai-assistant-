@@ -16,10 +16,10 @@
     button:hover{transform:translateY(-2px)}button svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8}button .close{display:none}
     :host([data-open]) button{padding:0;width:48px;min-height:48px;justify-content:center;border-radius:50%;background:#fff}
     :host([data-open]) button .mark,:host([data-open]) button .label{display:none}:host([data-open]) button .close{display:block}
-    iframe{position:absolute;bottom:63px;right:0;width:min(470px,calc(100vw - 44px));height:min(760px,calc(100dvh - 110px));border:1px solid #e1e6df;border-radius:25px;background:#fff;box-shadow:0 24px 80px #223a3233}
+    iframe{box-sizing:border-box;position:absolute;bottom:63px;right:0;width:min(470px,calc(100vw - 44px));height:min(760px,calc(100dvh - 110px));border:1px solid #e1e6df;border-radius:25px;background:#fff;box-shadow:0 24px 80px #223a3233}
     :host([data-expanded]) iframe{width:min(900px,calc(100vw - 44px))}iframe[hidden]{display:none}
-    :host([data-fullscreen][data-open]){position:fixed;inset:0;width:100%;height:100vh;height:100lvh;min-height:100dvh;background:#fff;overscroll-behavior:none}
-    :host([data-fullscreen]) iframe,:host([data-fullscreen][data-expanded]) iframe{position:absolute;inset:auto;top:var(--viewport-top,0px);left:var(--viewport-left,0px);right:auto;bottom:auto;width:var(--viewport-width,100vw);max-width:var(--viewport-width,100vw);height:var(--viewport-height,100dvh);max-height:var(--viewport-height,100dvh);min-height:0;border:0;border-radius:0;display:block}
+    :host([data-fullscreen][data-open]){position:fixed;inset:0;width:100%;height:100vh;height:100lvh;min-height:100dvh;background:transparent;pointer-events:none;overscroll-behavior:none}
+    :host([data-fullscreen]) iframe,:host([data-fullscreen][data-expanded]) iframe{position:absolute;inset:auto;top:var(--panel-top,24px);left:var(--panel-left,12px);right:auto;bottom:auto;width:var(--panel-width,calc(100vw - 24px));max-width:var(--panel-width,calc(100vw - 24px));height:var(--panel-height,88dvh);max-height:var(--panel-height,88dvh);min-height:0;border:1px solid #e1e6df;border-radius:24px;display:block;pointer-events:auto;box-shadow:0 18px 65px #183b3440}
     :host([data-fullscreen]) iframe[hidden]{display:none}:host([data-fullscreen][data-open]) button{display:none}
     @media(prefers-reduced-motion:reduce){button{transform:none!important}}
   `;
@@ -59,6 +59,12 @@
     for(const [key,value]of Object.entries(geometry)){
       host.style.setProperty('--viewport-'+key,value+'px');root.style.setProperty('--coop-viewport-'+key,value+'px');
     }
+    // Keep the storefront visible while following browser toolbars and the keyboard.
+    const panelWidth=Math.max(0,Math.min(470,geometry.width-24));
+    const panelHeight=Math.max(0,geometry.height<500?geometry.height-24:Math.min(740,Math.round(geometry.height*.88)));
+    const bottomGap=Math.min(24,Math.max(12,geometry.height*.025));
+    const panel={width:panelWidth,height:panelHeight,left:geometry.left+geometry.width-panelWidth-12,top:geometry.top+geometry.height-panelHeight-bottomGap};
+    for(const [key,value]of Object.entries(panel))host.style.setProperty('--panel-'+key,value+'px');
   }
   function scheduleViewport(){if(!viewportFrame)viewportFrame=requestAnimationFrame(()=>{viewportFrame=0;syncViewport();});}
   let ready=false, pending='', pendingView='chat',previousFocus;

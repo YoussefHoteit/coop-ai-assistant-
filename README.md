@@ -114,7 +114,7 @@ Product replies, recipe ingredients and both shopping-list views share an image 
 
 ### Mobile viewport and scrolling
 
-Fullscreen chat and the standalone shopping list lock the storefront at its current scroll position and restore it when closed. An opaque overlay covers the page while the frame follows the visual viewport's size and position, including toolbar changes, keyboard panning and rotation. Only the conversation, list and dialog content panes scroll; touch boundary handling prevents scrolling from escaping into the page. Conversation selection and input paste remain enabled.
+On phones, chat floats in a rounded panel with 12px side margins and a shorter height so the storefront remains visible. The panel follows the visual viewport through toolbar changes, keyboard panning and rotation, using the available space above the keyboard. Chat and the standalone shopping list lock the storefront at its current scroll position and restore it when closed. The standalone page list retains its existing full-screen layout. Only the conversation, list and dialog content panes scroll; touch boundary handling prevents scrolling from escaping into the page. Conversation selection and input paste remain enabled.
 
 `node tests/viewport.browser.mjs` checks simulated visual-viewport changes, keyboard geometry, touch boundaries, scroll restoration and desktop/mobile transitions. The responsive UI, copy and presentation browser suites also cover these layouts. These are automated Chromium checks; physical iOS Safari testing remains a separate device check.
 
