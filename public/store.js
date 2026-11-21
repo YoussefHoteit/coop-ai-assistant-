@@ -70,8 +70,21 @@ function refreshBasket() {
 
 byId('category-grid').append(...categories.map(categoryTile));
 byId('close-store-dialog').addEventListener('click', () => byId('store-dialog').close());
+const listDialog = byId('store-dialog');
+const listFrame = byId('store-list-frame');
+function closePageList() { listDialog.close(); byId('store-basket').focus({preventScroll:true}); }
+window.addEventListener('makhazen:close-list', closePageList);
+window.addEventListener('message',event=>{
+  if (event.source !== listFrame.contentWindow || event.origin !== location.origin) return;
+  if (event.data?.type === 'makhazen-close-list') closePageList();
+  if (event.data?.type === 'makhazen-list-changed') refreshBasket();
+});
+listFrame.addEventListener('load',()=>listFrame.contentWindow.postMessage({type:'makhazen-sync-list'},location.origin));
 byId('store-basket').addEventListener('click', () => {
-  window.dispatchEvent(new CustomEvent('makhazen:open', { detail: { view: 'list' } }));
+  window.dispatchEvent(new Event('makhazen:close'));
+  if (!listFrame.hasAttribute('src')) listFrame.src = '/assistant.html?list=1&parent=' + encodeURIComponent(location.origin);
+  if (!listDialog.open) listDialog.showModal();
+  listFrame.contentWindow.postMessage({type:'makhazen-sync-list'},location.origin);
 });
 window.addEventListener('storage', event => { if (event.key === listKey) refreshBasket(); });
 window.addEventListener('makhazen:list', refreshBasket);

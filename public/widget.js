@@ -46,6 +46,7 @@
     if(!open)(previousFocus?.focus?previousFocus:trigger).focus();
   }
   trigger.addEventListener('click',()=>{pendingView='chat';setOpen(iframe.hidden);sendPending();});
+  window.addEventListener('makhazen:close',()=>setOpen(false));
   trigger.addEventListener('keydown',event=>{if(event.key==='Escape'&&!iframe.hidden)setOpen(false);});
   window.addEventListener('makhazen:open',event=>{
     pending=typeof event.detail?.prompt==='string'?event.detail.prompt.slice(0,600):'';

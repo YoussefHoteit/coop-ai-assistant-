@@ -80,12 +80,14 @@ const savedLanguage = params.get('lang') || storage.read('makhazen-language', 'e
 const savedList = storage.read('makhazen-list-v1', []);
 let lang = ['en','ar','arz','fr'].includes(savedLanguage) ? savedLanguage : 'en';
 const widgetMode = params.get('widget') === '1';
+const listOnly = params.get('list') === '1' || window.name.startsWith('makhazen-list-');
 const parentOrigin = params.get('parent') || window.location.origin;
 if (widgetMode) document.body.classList.add('widget-mode');
+if (listOnly) document.body.classList.add('list-only');
 
 const list = new Map(Array.isArray(savedList) ? savedList.filter(item => item && typeof item.id === 'string' &&
   typeof item.amount === 'string').slice(0, 60).map(item => [item.id, item]) : []);
-const chatKey = 'makhazen-chat-v1-' + (widgetMode ? 'widget' : 'standalone');
+const chatKey = 'makhazen-chat-v1-' + (listOnly ? 'list' : widgetMode ? 'widget' : 'standalone');
 let savedChat;
 try { savedChat = JSON.parse(sessionStorage.getItem(chatKey)); } catch { /* Chat still works without storage. */ }
 const chat = Array.isArray(savedChat?.messages) ? savedChat.messages : [];
@@ -152,7 +154,7 @@ function setLanguage() {
   byId('mode-label').textContent = getText(catalog?.mode === 'ai' ? 'ai' : 'demo');
   document.querySelector('.chat-note').textContent = 'COOP · ' + getText('ready');
   for (const [id, key] of [['tab-all','allItems'],['tab-recipe','byRecipe'],['clear-list','clear'],['total-label','estimated'],['continue-chat','done'],['list-title','list']]) byId(id).textContent = getText(key);
-  renderPrompts();
+  if (listOnly) byId('continue-chat').textContent = getText('close');
   renderChat();
   renderList();
 }
@@ -180,12 +182,6 @@ function loadCatalog() {
       return data;
     }).finally(() => { catalogRequest = null; });
   return catalogRequest;
-}
-
-function renderPrompts() {
-  const prompts = getText('prompts').map(([glyph, label, message]) =>
-    button('prompt', label, glyph, () => sendMessage(message)));
-  byId('prompts').replaceChildren(...prompts);
 }
 
 function productDetails(product, language = lang, amount = '') {
@@ -541,7 +537,7 @@ function welcomeNode() {
   const actions = element('div', 'welcome-actions');
   for (const [key, glyph, index] of [['mealAction','chef',0],['findAction','search',1],['planAction','basket',2]]) {
     actions.append(button('welcome-action', getText(key), glyph, () => {
-      if (index === 0) sendMessage(getText('prompts')[0][2]);
+        if (index === 0) { byId('question').value = ({en:'Help me cook ',ar:'ساعدني أطبخ ',fr:'Aidez-moi à cuisiner ',arz:'Se3edne etbokh '})[lang]; focusChat(); }
       else { byId('question').value = index === 1 ? ({en:'Do you have ',ar:'هل لديكم ',fr:'Avez-vous ',arz:'3andkon '})[lang] : ({en:'Help me plan my shopping for ',ar:'ساعدني أخطط مشترياتي لـ ',fr:'Aidez-moi à préparer mes courses pour ',arz:'Se3edne ratteb el shopping la '})[lang]; focusChat(); }
     }));
   }
@@ -610,9 +606,23 @@ function renderList() {
   body.replaceChildren(...sections);
 }
 
+function closeEmbedded(type) {
+  if (window.parent === window) return;
+  window.parent.postMessage({ type }, parentOrigin);
+  // Close same-origin embeds immediately; cross-origin embeds use the message above.
+  try { window.parent.dispatchEvent(new CustomEvent(type === 'makhazen-close-list' ? 'makhazen:close-list' : 'makhazen:close')); } catch { /* Cross-origin embed. */ }
+}
+function syncList() {
+  const saved = storage.read('makhazen-list-v1', []);
+  if (!Array.isArray(saved)) return;
+  list.clear();
+  for (const item of saved) if (item && typeof item.id === 'string' && typeof item.amount === 'string') list.set(item.id,item);
+  renderList(); renderChat();
+}
+
 function saveList() {
   storage.write('makhazen-list-v1', [...list.values()]);
-  if (widgetMode) window.parent.postMessage({ type: 'makhazen-list-changed' }, parentOrigin);
+  if (widgetMode || listOnly) window.parent.postMessage({ type: 'makhazen-list-changed' }, parentOrigin);
 }
 
 const quantityUnits = [
@@ -850,13 +860,14 @@ byId('menu').addEventListener('click', () => toggleMenu(!byId('sidebar').classLi
 byId('shade').addEventListener('click', () => toggleMenu(false));
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
+  if (listOnly) { if (!byId('dialog').open) closeEmbedded('makhazen-close-list'); return; }
   if (byId('sidebar').classList.contains('open')) {
     toggleMenu(false);
     byId('menu').focus();
   } else if (document.body.classList.contains('show-list') && !byId('dialog').open) {
     setListOpen(false);
   } else if (widgetMode && !byId('dialog').open) {
-    window.parent.postMessage({ type: 'makhazen-close-widget' }, '*');
+    closeEmbedded('makhazen-close-widget');
   }
 });
 byId('new-chat').addEventListener('click', resetChat);
@@ -864,20 +875,25 @@ byId('reset').addEventListener('click', resetChat);
 byId('copy').addEventListener('click', copyList);
 byId('close-dialog').addEventListener('click', () => byId('dialog').close());
 byId('list-toggle').addEventListener('click',()=>setListOpen(!document.body.classList.contains('show-list')));
-byId('list-close').addEventListener('click',()=>setListOpen(false));
-byId('continue-chat').addEventListener('click',()=>{setListOpen(false);focusChat();});
+byId('list-close').addEventListener('click',()=>listOnly ? closeEmbedded('makhazen-close-list') : setListOpen(false));
+byId('continue-chat').addEventListener('click',()=>{if (listOnly) closeEmbedded('makhazen-close-list'); else {setListOpen(false);focusChat();}});
 byId('clear-list').addEventListener('click',()=>updateList(()=>list.clear(),getText('cleared')));
 for (const [id,mode] of [['tab-all','all'],['tab-recipe','recipe']]) byId(id).addEventListener('click',()=>{
   groupMode=mode; byId('tab-all').setAttribute('aria-pressed',String(mode==='all')); byId('tab-recipe').setAttribute('aria-pressed',String(mode==='recipe')); renderList();
 });
 byId('shopping-list').inert = true;
-byId('widget-close').addEventListener('click', () => window.parent.postMessage({ type: 'makhazen-close-widget' }, parentOrigin));
+byId('widget-close').addEventListener('click', () => closeEmbedded('makhazen-close-widget'));
 byId('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage(byId('question').value);
 });
 setLanguage();
+if (listOnly) { document.title = 'COOP · Shopping list'; setListOpen(true); }
 loadCatalog().catch(() => { /* Chat and browse each retry the request when needed. */ });
+window.addEventListener('storage', event => { if (event.key === 'makhazen-list-v1') syncList(); });
+window.addEventListener('message', event => {
+  if (event.source === window.parent && event.origin === parentOrigin && event.data?.type === 'makhazen-sync-list') syncList();
+});
 if (widgetMode && window.parent !== window) {
   window.addEventListener('message', event => {
     if (event.source === window.parent && event.origin === parentOrigin && event.data?.type === 'makhazen-view') { setListOpen(event.data.view === 'list'); }

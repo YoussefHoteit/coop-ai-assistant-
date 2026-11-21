@@ -9,7 +9,7 @@ const out=path.resolve('tmp/ui-qa');await mkdir(out,{recursive:true});
 const results=[];
 try{
  for(const [width,height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,900],[667,375]]){
-  const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce'});
+  const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce',hasTouch:width<=1024,isMobile:width<=760});
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   // Keep this run deterministic and exercise image fallbacks without depending on third-party servers.
   await page.route('https://**/*',route=>route.abort());
@@ -18,6 +18,10 @@ try{
   const frame=page.frameLocator('al-makhazen-assistant-widget iframe');
   await frame.locator('.welcome').waitFor();
   assert.equal(await frame.locator('#language').count(),0);
+  assert.equal(await frame.locator('#prompts').count(),0,'Suggestion chips removed');
+  await frame.locator('.welcome-action').first().click();
+  assert.equal(await frame.locator('.message').count(),0,'Meal action does not send a recipe');
+  assert.equal(await frame.locator('#question').inputValue(),'Help me cook ');
   await page.screenshot({path:path.join(out,`welcome-${width}.png`)});
   await frame.locator('#question').fill('Give me tabbouleh for 4');await frame.locator('.send').click();
   await frame.locator('.result-card .primary').waitFor({timeout:15000});
@@ -41,7 +45,7 @@ try{
   await page.screenshot({path:path.join(out,`list-${width}.png`)});
   const bounds=await frame.locator('body').evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,buttons:[...document.querySelectorAll('#list-close,#continue-chat,#copy')].map(e=>({id:e.id,rect:e.getBoundingClientRect().toJSON()})),height:innerHeight}));
   assert.ok(bounds.scroll<=bounds.width+1,`No horizontal overflow: ${JSON.stringify(bounds)}`);
-  for(const e of bounds.buttons) assert.ok(e.rect.bottom<=bounds.height+1&&e.rect.x>=0,`Visible list control ${e.id}: ${JSON.stringify(bounds)}`);
+  for(const e of bounds.buttons.filter(e=>e.rect.height)) assert.ok(e.rect.bottom<=bounds.height+1&&e.rect.x>=0,`Visible list control ${e.id}: ${JSON.stringify(bounds)}`);
   await frame.locator('#copy').click();
   if(await frame.locator('#dialog').evaluate(e=>e.open))await frame.locator('#close-dialog').click();
   await frame.locator('#clear-list').click();assert.equal(await frame.locator('.list-item').count(),0);
@@ -49,12 +53,26 @@ try{
   await frame.locator('#continue-chat').click();
   await frame.locator('#reset').click();await frame.locator('.welcome').waitFor();
   assert.equal((await page.evaluate(()=>JSON.parse(localStorage.getItem('makhazen-list-v1')))).length,count,'New chat retains list');
-  await frame.locator('#widget-close').click();
-  await page.locator('#store-basket').click();await frame.locator('#shopping-list').waitFor({state:'visible'});
-  assert.equal(await frame.locator('.list-item').count(),count,'Header opens same list');
+  if(width<=1024) await frame.locator('#widget-close').tap(); else await frame.locator('#widget-close').click();
+  await page.locator('al-makhazen-assistant-widget iframe').waitFor({state:'hidden'});
+  await page.locator('#store-basket').click();
+  const standalone=page.frameLocator('#store-list-frame');await standalone.locator('.list-item').first().waitFor();
+  assert.equal(await standalone.locator('.list-item').count(),count,'Standalone view uses same list');
+  assert.equal(await standalone.locator('#chat').isVisible(),false,'Page list has no assistant UI');
+  assert.equal(await page.locator('al-makhazen-assistant-widget iframe').isVisible(),false,'Header list does not open assistant');
   assert.equal(await page.locator('#basket-count').innerText(),String(count));
-  await page.reload();await page.locator('#store-basket').click();await frame.locator('.list-item').first().waitFor();
-  assert.equal(await frame.locator('.list-item').count(),count,'List survives reload');
+  const oldTotal=await standalone.locator('#list-total').innerText();
+  await standalone.locator('.quantity-stepper button').nth(1).click();
+  const editedTotal=await standalone.locator('#list-total').innerText();assert.notEqual(editedTotal,oldTotal);
+  await standalone.locator('#list-close').click();await page.locator('#store-dialog').waitFor({state:'hidden'});
+  await page.locator('al-makhazen-assistant-widget button').click();await frame.locator('#list-toggle').click();
+  await page.waitForTimeout(100);assert.equal(await frame.locator('#list-total').innerText(),editedTotal,'Standalone edits sync into agent');
+  if(width<=1024) await frame.locator('#widget-close').tap(); else await frame.locator('#widget-close').click();
+  await page.locator('al-makhazen-assistant-widget iframe').waitFor({state:'hidden'});
+  await page.reload();await page.locator('#store-basket').click();await standalone.locator('.list-item').first().waitFor();
+  assert.equal(await standalone.locator('.list-item').count(),count,'List survives reload');
+  await page.screenshot({path:path.join(out,`standalone-list-${width}.png`)});
+  await standalone.locator('#continue-chat').click();await page.locator('#store-dialog').waitFor({state:'hidden'});
   assert.equal(errors.length,0,errors.join('\n'));
   results.push({width,height,items:count,total:before,passed:true});console.log('PASS',width,height);
   await context.close();
