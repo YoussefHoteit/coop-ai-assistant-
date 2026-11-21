@@ -769,7 +769,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
       if (fallback.card || fallback.link || fallback.suggestedRecipes) return presentReply(fallback, 'fallback', lang);
     }
     const retry = lang === 'fr' ? frenchChatCopy.retry : lang === 'arz' ? arabiziChatCopy.retry : lang === 'ar' ? 'ما قدرت جيب الجواب. جرّب مرّة تانية.' : 'I couldn’t load a reply. Please try again.';
-    return presentReply({ text: retry, error: true, requestId, errorCode }, 'error', lang);
+    return presentReply({ text: retry, error: true, requestId, errorCode, ...(error.fields?.length&&{errorFields:error.fields}) }, 'error', lang);
   }
 }
 
