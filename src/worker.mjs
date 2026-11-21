@@ -317,6 +317,7 @@ const scopeSchema = {
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
 
 const rules = [
+  'If serverRecipeRevision is provided, keep the same requested dish, servings and explicit shopper constraints, and revise only the unmatched ingredient forms using the verified same-family alternatives. Adjust the preparation steps for the selected form and explain any meaningful preparation change. Never substitute an explicit ingredient variety, dietary requirement or brand without agreement. Use only exact real product IDs and do not claim an alternative is the original ingredient.',
   'For recipes, keep answer about the dish, useful preparation notes, explicit adaptations or budget. Do not narrate missing matches or uncertain stock just because an ingredient ID is null: the server resolves every ingredient afterwards and adds verified availability notes itself. Keep genuine allergy/label warnings when relevant.',
   'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
   'You are the Al Makhazen COOP shopping assistant for its complete multi-department catalog. Follow the response language specified below for the entire reply, including recipe titles, steps, ingredients and quantities. Retain original brand names or foreign terms only when they clarify the answer.',
@@ -518,7 +519,7 @@ async function shoppingDecision(env, model, input, history, recentLanguage, sign
   }
 }
 
-async function modelReply(env, model, input, history, lang, priceOnly, signal, publish, plan = {}) {
+async function modelReply(env, model, input, history, lang, priceOnly, signal, publish, plan = {}, state = {}) {
   const stockQuestion = /\b(?:do (?:you|they) (?:have|sell|stock)|you (?:don.t|dont|do not) have|avez.vous|vendez.vous)\b|عندكن|عندكم|3andkon|3andkun/iu.test(input);
   const plannedQueries=Array.isArray(plan.queries)?plan.queries.filter(q=>typeof q==='string'&&q.trim().length>1).slice(0,12).map(q=>q.slice(0,100)):[];
   const initialQueries=plannedQueries.length?plannedQueries:stockQuestion?shoppingLookupQueries(input):[];
@@ -535,7 +536,8 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
   const retrieved=new Set(initialProducts.map(product=>product.id));
   const conversation=[{role:'user',content:JSON.stringify({earlierMessages:history,message:input,
     interpretedRequest:typeof plan.englishRequest==='string'?plan.englishRequest.slice(0,900):null,
-    requestIntent:plan.intent||null,serverProductMatches:initialMatches.map(g=>({...g,results:g.results.map(promptProduct)}))})}];
+    requestIntent:plan.intent||null,serverProductMatches:initialMatches.map(g=>({...g,results:g.results.map(promptProduct)})),
+    ...(state.revision&&{serverRecipeRevision:state.revision})})}];
   const priceInstructions = priceOnly ? '\nThis is a price-only request. Look up the exact product or products being asked about and return their IDs in items. Leave answer empty because the app displays the listed price directly.' : '';
 
   let formatRetried = false;
@@ -561,7 +563,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       tools: [inventoryTool, alternativeTool],
       // The server searches the complete inventory again for every generated ingredient.
       // Recipe writing does not need several serial calls to repeat the same lookups.
-      tool_choice: plan.intent==='recipe' || toolRounds >= 3 ? 'none' : 'auto',
+      tool_choice: plan.intent==='recipe' || state.revision || toolRounds >= 3 ? 'none' : 'auto',
       ...(reasoningModel.test(model) && {
         reasoning: { effort: 'low' },
         include: ['reasoning.encrypted_content'],
@@ -653,7 +655,26 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const text = hasUnconfirmedIngredient ? availabilityNote + ' ' + recipeAdaptationPrompt[lang] :
       recipeAvailabilityProse(plainReplyText(answer).slice(0,4000),lang,Boolean(validRecipe));
     if (!text && !card) throw new Error('The model did not return a usable reply.');
-    return { text, card };
+    const prepared={text,card};
+    if(validRecipe&&!state.revision&&matches.some(item=>!item.id)&&!signal.aborted){
+      const shopperRequests=[input,...history.filter(m=>m.role==='user').map(m=>m.content)].join(' ');
+      const requirements=productTaxonomy.queryInfo(shopperRequests);
+      const protectedDiet=requirements.qualifiers.length||/allerg|intoleran|حساس|7asasi/i.test(shopperRequests);
+      const groups=entries.filter((_,i)=>!recipeProducts[i]).map(entry=>{
+        const info=productTaxonomy.queryInfo(entry.catalogQuery||entry.name||'');
+        if(protectedDiet||!info.types.length||info.brands.length||info.qualifiers.length||info.attributes.some(a=>requirements.attributes.includes(a))||info.storage&&info.storage===requirements.storage)return null;
+        const choices=recipeInventory.candidates({name:info.types[0],catalogQuery:info.types[0]},8).filter(p=>p.available===true).slice(0,4);
+        return choices.length?{ingredient:entry.name,requiredFamily:info.types[0],choices:choices.map(promptProduct)}:null;
+      }).filter(Boolean);
+      if(groups.length){
+        try{
+          const revised=await modelReply(env,model,input,history,lang,false,signal,undefined,plan,{revision:{draft:{recipe,items:entries},unmatched:groups}});
+          const types=new Set((revised.card?.items||[]).map(item=>productsById.get(item.id)).filter(p=>p?.available===true).map(p=>productTaxonomy.records.get(p.id)?.productType));
+          if(revised.card?.kind==='recipe'&&revised.card.servings===card.servings&&revised.card.items.every(i=>i.id)&&groups.every(g=>types.has(g.requiredFamily)))return revised;
+        }catch{ /* Keep the valid original recipe if optional adaptation fails. */ }
+      }
+    }
+    return prepared;
   }
   throw new Error('The model did not complete the inventory lookup.');
 }
