@@ -129,7 +129,7 @@ test('an unconstrained recipe can revise an unmatched form using an available pr
   if(revision){revisions++;assert.equal(body.tool_choice,'none');assert.equal(revision.unmatched[0].requiredFamily,'chicken');assert.ok(revision.unmatched[0].choices.every(p=>p.available));}
   return Response.json({output:output({inScope:true,recipe:{title:'Chicken meal',servings:2,minutes:30,steps:[revision?'Remove the bones from the whole chicken, then cook its meat.':'Cook the chicken breast.'],revisesRecipe:null},items:[{id:revision?'136033':null,name:revision?'Whole chicken':'Chicken breast',catalogQuery:revision?'whole chicken':'chicken breast',amount:'500 g',grams:500}],answer:revision?'Use boneless meat from a whole chicken for this version.':'',showNutrition:false})});
  };
- try{const result=await replyFor('Help me cook a chicken meal');assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,'136033',JSON.stringify({revisions,result}));assert.match(result.card.steps[0],/Remove the bones/);assert.equal(revisions,1);}finally{globalThis.fetch=previous;}
+ try{const result=await replyFor('Help me cook a chicken meal');assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,'136033',JSON.stringify({revisions,result}));assert.match(result.card.steps[0],/Remove the bones/);assert.equal(revisions,1);assert.equal(result.recipeRevision.status,'applied');}finally{globalThis.fetch=previous;}
 });
 
 test('explicit ingredient forms and dietary constraints are never relaxed to fill a recipe card',async()=>{

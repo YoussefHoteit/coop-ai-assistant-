@@ -96,6 +96,10 @@ The import is validated before replacing the existing local snapshot. A multi-br
 
 ### Recipe reliability and showcase checks
 
+When a recipe draft proposes an unmatched ingredient form, one optional revision can use verified available choices of the same food family and update preparation steps. Draft choices are not shopper requirements. Explicit forms, brands, dietary/allergy constraints and serving counts remain protected; a failed optional revision retains the original valid recipe and genuine missing/out-of-stock states. These mechanisms apply to every recipe, with no dish-specific response branches.
+
+For an explicit USD spending budget, the final estimate uses the same whole-pack arithmetic as the shopping list. If necessary, suitable lower-cost brands or sizes are compared without changing ingredient type, recipe quantities or explicit constraints. Conditional free offers are not treated as unconditional items. The assistant does not assume pantry items are free and does not replace the checkout estimate with a portion cost.
+
 Recipe generation uses ingredient candidates retrieved in advance and resolves every returned ingredient against the complete inventory. Planned recipes skip redundant model tool rounds. Groups containing other varieties are marked as alternatives, without relaxing explicit dietary, brand or variety constraints. Seasoning names cannot override the commodity type of an actual food. Raw meat ingredient matching excludes unsolicited prepared forms and cold cuts.
 
 Language and wording repairs run on a separate text-only schema. IDs, prices, stock, servings, grams, preparation order and recipe references are retained, and repairs that change numeric amounts are rejected. The server has a 52-second total deadline under the platform's 60-second function limit; the browser waits 57.5 seconds. Temporary provider errors and incomplete responses have bounded recovery. Complete terminal streaming frames are accepted even without a final separator. Failures include a request ID and coarse error code; logs contain stage and duration without shopper messages, provider output or credentials.
