@@ -142,3 +142,15 @@ test('explicit ingredient forms and dietary constraints are never relaxed to fil
  };
  try{for(const message of ['Use chicken breast only, no other cuts','I have a peanut allergy and need a chicken meal']){const result=await replyFor(message);assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,null);assert.equal(revisions,0);}}finally{globalThis.fetch=previous;}
 });
+
+test('clear recipe plans recover an unnecessary follow-up or mistaken refusal within the first request',async()=>{
+ const previous=fetch;
+ try{for(const refuse of [false,true]){let calls=0;globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);calls++;
+  if(calls===1)return Response.json({output:output(decision('en',{intent:'recipe',englishRequest:'Prepare a rice dish',queries:['rice']}))});
+  if(calls===2)return Response.json({output:output({...answer(refuse?'':'How many people?'),inScope:!refuse})});
+  assert.match(body.input.at(-1).content,/four servings/);
+  return Response.json({output:output({inScope:true,recipe:{title:'Rice',servings:4,minutes:20,steps:['Cook the rice.'],revisesRecipe:null},items:[{id:null,name:'Rice',catalogQuery:'rice',amount:'200 g',grams:200}],answer:'',showNutrition:false})});
+ };
+ const result=await replyFor('Help me cook rice');assert.equal(result.mode,'ai');assert.equal(result.card.servings,4);assert.ok(result.card.items[0].id);assert.equal(calls,3);}}
+ finally{globalThis.fetch=previous;}
+});

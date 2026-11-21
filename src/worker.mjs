@@ -293,6 +293,7 @@ function demoReply(input, lang, context) {
 }
 
 const scopeRules = [
+  'Set request.intent=recipe for a clearly understood cooking request. If the dish itself or a critical requirement is genuinely ambiguous, use intent=other and plan a brief relevant clarification. Missing supplier matches do not make a recipe request ambiguous or out of scope.',
   'You are a scope reviewer for Al Makhazen COOP’s customer shopping assistant.',
   'Allow shopping assistance for ALL merchandise sold by Al Makhazen COOP, its products and services, promotions, prices, availability, product comparisons, shopping budgets and lists, plus food preparation, recipes, storage, nutrition, labels and allergens. COOP is a multi-department retailer, not a food-only store. Allow brief greetings and genuine shopping follow-ups.',
   'Its catalog includes electronics and phone accessories (including car chargers), stationery and school supplies (pencils, pens, notebooks, backpacks and pencil cases), seasonal Christmas items and clothing such as socks, toys, kitchen accessories, household goods, personal care, baby care and pet supplies, as well as groceries. Asking whether COOP sells ANY retail product is an allowed inventory lookup even if that product is unfamiliar or ultimately absent from the catalog. Do not reject a shopping question because the item is not typical supermarket food.',
@@ -317,6 +318,7 @@ const scopeSchema = {
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
 
 const rules = [
+  'For a clearly understood recipe request, return a complete recipe card on this turn. Default to four servings if no count is given, and allow later adjustments. Do not ask the shopper to repeat the dish, add the word recipe, switch languages, or give a serving count before receiving a useful recipe. Ask a clarification only if the dish or a critical requirement is genuinely unclear. Keep unresolved ingredients for server matching rather than replacing the whole recipe with a stock question.',
   'If serverRecipeRevision is provided, keep the same requested dish, servings and explicit shopper constraints, and revise only the unmatched ingredient forms using the verified same-family alternatives. Adjust the preparation steps for the selected form and explain any meaningful preparation change. Never substitute an explicit ingredient variety, dietary requirement or brand without agreement. Use only exact real product IDs and do not claim an alternative is the original ingredient.',
   'For recipes, keep answer about the dish, useful preparation notes, explicit adaptations or budget. Do not narrate missing matches or uncertain stock just because an ingredient ID is null: the server resolves every ingredient afterwards and adds verified availability notes itself. Keep genuine allergy/label warnings when relevant.',
   'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
@@ -599,6 +601,11 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
 
     let reply;
     try { reply = structuredReply(output); } catch { /* A partial JSON reply is repaired within this request. */ }
+    if(reply?.inScope===false&&plan.intent==='recipe'&&!formatRetried){
+      formatRetried=true;
+      conversation.push(...output,{role:'user',content:'The scope-reviewed request is a clearly understood food recipe. Keep all strict scope rules, but do not treat unmatched stock as out of scope. Return its recipe card now, using four servings if no count was provided. Do not require the shopper to repeat the request.'});
+      continue;
+    }
     if (reply?.inScope === false) return { text: messages[lang].scope };
     const shapeValid=reply?.inScope===true&&typeof reply.answer==='string'&&Array.isArray(reply.items)&&
       (!reply.recipe||(typeof reply.recipe.title==='string'&&Number.isInteger(reply.recipe.servings)&&
@@ -607,6 +614,11 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       if (formatRetried) throw new Error('Invalid shopping reply.');
       formatRetried=true;
       conversation.push({role:'user',content:'Return a complete valid shopping_reply JSON object using the supplied schema. Keep the scope and language requirements, and use only verified product IDs. The previous response was incomplete or malformed.'});
+      continue;
+    }
+    if(plan.intent==='recipe'&&!reply.recipe&&!formatRetried){
+      formatRetried=true;
+      conversation.push(...output,{role:'user',content:'The interpreted request is a clear recipe request. Return a complete recipe card on this turn, defaulting to four servings if needed. Use null IDs for genuinely unresolved ingredients so the server can finish matching. Keep every explicit constraint and the required language; do not ask an unnecessary serving-count or spelling follow-up.'});
       continue;
     }
     if(lang==='arz')reply=normalizeArabiziRemainders(reply);
