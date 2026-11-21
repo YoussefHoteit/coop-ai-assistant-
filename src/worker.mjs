@@ -580,7 +580,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     }
     if (!replyUsesCorrectScript(reply, lang) || mentionsInternalData(reply)) {
       if (shown) publish('', lang);
-      if (languageRetried) throw new Error('Reply language did not match the shopper.');
+      if (languageRetried) throw Object.assign(new Error('Reply language did not match the shopper.'), { code: !replyUsesCorrectScript(reply, lang) ? 'reply_language' : 'reply_wording' });
       languageRetried = true;
       conversation.push(...output, { role: 'user', content: 'Rewrite the same shopping reply in the required response language: ' + replyLanguageInstructions[lang] + ' Preserve product IDs, facts and quantities. Correct every text field, including recipe steps and ingredient names. Speak as COOP: use we have/we offer or the matching local phrase. Never mention catalogs, inventory, snapshots, databases, sources or earlier search mistakes. Do not say I found.' });
       continue;
@@ -700,6 +700,8 @@ function streamReply(requestSignal, resolve) {
 }
 
 async function resolveChat(input, body, env, requestSignal, publish) {
+  const requestId = crypto.randomUUID(), started = Date.now();
+  let stage = 'scope';
   const recentLanguage = replyLanguages.includes(body.lang) ? body.lang : 'en';
   let lang = detectReplyLanguage(input, recentLanguage);
   const demo = () => demoReply(input, lang, body.context);
@@ -724,21 +726,23 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     lang = chooseReplyLanguage(input, recentLanguage, decision.language);
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
+    stage = 'reply';
     const priceOnly = decision.priceOnly || asksLastPrice;
     return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish, decision.request), 'ai', lang);
   } catch (error) {
     if (requestSignal.aborted) return null;
-    if (error instanceof Error && /^OpenAI returned HTTP \d{3}\.$/.test(error.message)) {
-      console.warn(error.message);
-    } else {
-      console.warn('OpenAI did not deliver a complete shopping reply.');
-    }
+    const errorCode = /^[a-z_]+$/.test(error?.code || '') ? error.code :
+      error?.name === 'TimeoutError' ? 'deadline' : error?.name === 'AbortError' ? 'aborted' :
+      /^OpenAI returned HTTP \d{3}\.$/.test(error?.message || '') ? 'provider_http_' + error.message.match(/\d{3}/)[0] :
+      error instanceof SyntaxError ? 'invalid_json' : error instanceof TypeError ? 'connection' :
+      /scope/.test(error?.message || '') ? 'scope_response' : /incomplete|Incomplete/.test(error?.message || '') ? 'incomplete_response' : 'invalid_reply';
+    console.warn(JSON.stringify({ event:'shopping_reply_failed', requestId, stage, errorCode, elapsedMs:Date.now()-started }));
     if (scopeAllowed) {
       const fallback = demo();
       if (fallback.card || fallback.link || fallback.suggestedRecipes) return presentReply(fallback, 'fallback', lang);
     }
     const retry = lang === 'fr' ? frenchChatCopy.retry : lang === 'arz' ? arabiziChatCopy.retry : lang === 'ar' ? 'ما قدرت جيب الجواب. جرّب مرّة تانية.' : 'I couldn’t load a reply. Please try again.';
-    return presentReply({ text: retry, error: true }, 'error', lang);
+    return presentReply({ text: retry, error: true, requestId, errorCode }, 'error', lang);
   }
 }
 
