@@ -1,5 +1,6 @@
 // Match recipe ingredients to edible product types, not just words in any product.
 export function createRecipeInventory(products, baseSearch, normalize) {
+  const byId = new Map(products.map(product => [product.id, product]));
   const food = new Set(['produce', 'dairy', 'meat', 'fish', 'bakery', 'pantry', 'ready', 'frozen', 'organic', 'snacks', 'beverages', 'coffee-tea']);
   const category = (product, key) => product.category === key || product.additionalCategories?.includes(key);
   const named = (product, pattern) => pattern.test(normalize(product.name.en));
@@ -68,6 +69,54 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     return candidates[0].profile;
   }
   const edible = product => [product.category, ...(product.additionalCategories || [])].some(key => food.has(key));
+  const stem = word => word.length > 3 && !word.endsWith('ss') ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
+  const tokens = value => normalize(value).split(' ').filter(Boolean).map(stem);
+  const queryFor = entry => String(entry.catalogQuery || entry.name || '').trim().slice(0, 120);
+  const requirements = [
+    [/gluten free|sans gluten/, /gluten\s*free|sans gluten/],
+    [/lactose free|sans lactose/, /lactose\s*free|sans lactose/],
+    [/\bvegan\b/, /\bvegan\b/],
+    [/whole wheat|wholemeal|ble complet/, /whole\s*wheat|wholemeal|integral|complet/],
+    [/unsalted|beurre doux/, /unsalt|doux/],
+  ];
+  function eligible(entry, product) {
+    if (!product || !edible(product)) return false;
+    const query = normalize(queryFor(entry));
+    const requested = normalize(queryFor(entry) + ' ' + (entry.name || ''));
+    const name = normalize(product.name.en);
+    const profile = profileFor(query) || profileFor(entry.name || '');
+    if (profile && !profile.accepts(product)) return false;
+    for (const [condition, evidence] of requirements) if (condition.test(requested) && !evidence.test(name)) return false;
+    // A flavor or ingredient mentioned inside a different food does not make it the requested ingredient.
+    const composed = ['tuna', 'sardine', 'mackerel', 'chips', 'crisps', 'biscuit', 'cookie', 'cracker', 'sausage', 'mortadella', 'nuggets', 'burger', 'soup'];
+    if (composed.some(word => new RegExp('\\b' + word + '\\b').test(name) && !new RegExp('\\b' + word + '\\b').test(query))) return false;
+    if (/all purpose|wheat flour/.test(requested) && /corn flour|rice flour|almond flour|coconut flour|self rais/.test(name)) return false;
+    if (/white sugar/.test(requested) && /brown|coconut/.test(name)) return false;
+    if (/\bchicken\b/.test(requested) && /\bturkey|\bbeef|\bpork/.test(name) && !/\bchicken\b/.test(name)) return false;
+    if (/\b(?:milk|cream|butter|sugar|flour)\b/.test(requested) && ['chocolate', 'vanilla', 'strawberry', 'caramel'].some(flavor => name.includes(flavor) && !requested.includes(flavor))) return false;
+    if (/fresh (?:milk|mushroom|tomato)|raw chicken/.test(requested) && /powder|dried|dehydrat|canned|condensed|cooked|grilled/.test(name)) return false;
+    return true;
+  }
+  const candidateCache = new Map();
+  function candidates(entry, limit = 8) {
+    const query = queryFor(entry);
+    const key = normalize(query + '|' + (entry.name || ''));
+    if (candidateCache.has(key)) return candidateCache.get(key).slice(0, limit);
+    const profile = profileFor(query) || profileFor(entry.name || '');
+    const clean = normalize(query).replace(/\b(?:finely|roughly|chopped|diced|sliced|peeled|grated|minced|to taste|for garnish)\b/g, ' ').replace(/ +/g, ' ').trim();
+    const words = clean.split(' ').filter(word => word.length > 2 && !['and', 'the', 'with', 'for'].includes(word));
+    const searches = profile ? [profile.terms[0]] : [...new Set([query, clean, words.slice(-2).join(' '), ...words])].filter(Boolean).slice(0, 8);
+    const pool = [...new Map(searches.flatMap(term => search(term)).map(product => [product.id, product])).values()];
+    const requested = tokens(query);
+    const ranked = pool.filter(product => eligible(entry, product)).map(product => {
+      const nameTokens = new Set(tokens(product.name.en));
+      const overlap = requested.filter(word => nameTokens.has(word)).length;
+      const plain = ['produce', 'dairy', 'meat', 'fish', 'pantry', 'bakery'].some(key => category(product, key));
+      return { product, score: overlap * 10 + Number(overlap === requested.length) * 15 + Number(plain) * 8 + Number(product.available === true) * 20 };
+    }).sort((a, b) => b.score - a.score || a.product.name.en.localeCompare(b.product.name.en)).map(({ product }) => product);
+    candidateCache.set(key, ranked);
+    return ranked.slice(0, limit);
+  }
   const cached = new Map();
   function search(query, selectedCategory) {
     const profile = profileFor(query);
@@ -81,19 +130,24 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     return hits;
   }
   function resolve(entry, allowedIds) {
-    const existing = allowedIds.has(entry.id) ? products.find(product => product.id === entry.id) : null;
+    const existing = allowedIds.has(entry.id) ? byId.get(entry.id) : null;
     const query = typeof entry.catalogQuery === 'string' && entry.catalogQuery.trim() ? entry.catalogQuery.trim() : entry.name || '';
     const profile = profileFor(query) || profileFor(entry.name || '');
     // Keep exact, valid choices. Replace a sold-out generic choice only with the same ingredient type.
-    if (existing && edible(existing) && (!profile || profile.accepts(existing)) && (existing.available === true || !profile)) return existing;
-    const candidates = search(profile ? profile.terms[0] : query).filter(product => edible(product) && (!profile || profile.accepts(product)));
+    if (existing && eligible(entry, existing) && (existing.available === true || !profile)) return existing;
+    const matches = profile ? search(profile.terms[0]).filter(product => eligible(entry, product)) : candidates(entry, 30);
     if (!profile) {
-      // Without a known ingredient type, accept only an exact product-name or identifier match.
-      const exact = candidates.find(product => normalize(product.name.en) === normalize(query) || product.id === query || product.sku === query);
-      return existing && edible(existing) ? existing : exact || null;
+      const exact = matches.find(product => normalize(product.name.en) === normalize(query) || product.id === query || product.sku === query);
+      // Full ingredient phrases may occur within branded names or in a different word order.
+      const words = tokens(query);
+      const phrase = words.length >= 2 && matches.find(product => {
+        const name = new Set(tokens(product.name.en));
+        return words.every(word => name.has(word));
+      });
+      return exact || phrase || (existing && eligible(entry, existing) ? existing : null);
     }
-    return candidates.find(product => product.available === true) ||
-      (existing && profile.accepts(existing) ? existing : candidates[0]) || null;
+    return matches.find(product => product.available === true) ||
+      (existing && eligible(entry, existing) ? existing : matches[0]) || null;
   }
-  return { search, resolve };
+  return { search, resolve, candidates, eligible };
 }
