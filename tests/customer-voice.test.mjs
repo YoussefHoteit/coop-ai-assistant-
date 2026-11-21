@@ -64,7 +64,9 @@ test('internal search narration is rewritten as a natural COOP answer', async ()
     if (++calls === 1) return Response.json({ output: output({ allowed: true, language: 'en', priceOnly: false }) });
     if (calls === 2) return Response.json({ output: output(reply('I found Del Libano Fettucine Verdi in the catalog for $2.85.', [item])) });
     assert.match(body.input.at(-1).content, /Speak as COOP/);
-    return Response.json({ output: output(reply('Yes, we have Del Libano Fettucine Verdi 400g for $2.85.', [item])) });
+    assert.equal(body.text.format.name,'shopping_prose');
+    const slots=JSON.parse(body.input[0].content).requiredTexts;
+    return Response.json({output:output({texts:slots.map(row=>({...row,text:row.key==='answer'?'Yes, we have Del Libano Fettucine Verdi 400g for $2.85.':row.text}))})});
   };
   try {
     const data = await (await worker.fetch(request('Do you have fettuccinin pasta?'), { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' })).json();

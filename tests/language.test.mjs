@@ -69,8 +69,9 @@ test('a wrong script is corrected once instead of returning Arabic script to an 
     const body = JSON.parse(options.body);
     if (++calls === 1) return Response.json({ output: output({ allowed: true, language: 'arz', priceOnly: false }) });
     if (calls === 2) return Response.json({ output: output(reply('يمكنك تحضير المعكرونة.')) });
-    assert.ok(body.input.at(-1).content.includes('Rewrite the same shopping reply'));
-    return Response.json({ output: output(reply('Fik ta3mol pasta.')) });
+    assert.equal(body.text.format.name,'shopping_prose');
+    assert.ok(!body.tools,'Language repair must not restart inventory lookups');
+    return Response.json({ output: output({texts:[{key:'answer',text:'Fik ta3mol pasta.'}]}) });
   };
   try {
     const result = await (await worker.fetch(request('shu fina netbokh'), env)).json();

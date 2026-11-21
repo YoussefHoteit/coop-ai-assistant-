@@ -100,7 +100,9 @@ test('AI recipe tool searches the full inventory and rejects fabricated product 
     const reply = await chat('Chicken Alfredo recipe please', {}, { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' });
     assert.equal(reply.mode, 'ai');
     assert.equal(reply.card.title, 'Chicken Alfredo');
-    assert.deepEqual(reply.card.items.slice(0, 6).map(p => p.id), chosen.map(p => p.id));
+    assert.deepEqual(reply.card.items.slice(1, 6).map(p => p.id), chosen.slice(1).map(p => p.id));
+    assert.equal(reply.products[0].category,'meat');
+    assert.doesNotMatch(reply.products[0].name.en,/crispy|breaded|mortadella/i,'A generic recipe chicken must not resolve to a processed snack or cold cut');
     assert.equal(reply.card.items.at(-1).id, null);
     assert.equal(reply.products.length, 6);
   } finally { globalThis.fetch = previousFetch; }

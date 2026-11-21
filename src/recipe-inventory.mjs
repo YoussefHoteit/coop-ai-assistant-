@@ -93,6 +93,12 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const localized = taxonomy.queryInfo(entry.name || '');
     if (localized.types.length && !taxonomy.compatible(localized,product)) return false;
     if (profile && !profile.accepts(product)) return false;
+    if (taxonomy.queryInfo(query).types.some(type=>['chicken','beef','lamb'].includes(type))) {
+      if (/cold cuts/i.test(product.subcategory||'') && !/cold cut|smoked|mortad|sausage/.test(requested)) return false;
+      for (const form of ['breaded','crispy','crunchy','marinated','fajita','sauce','soudjouk','nugget','burger']) {
+        if (name.includes(form) && !requested.includes(form)) return false;
+      }
+    }
     for (const [condition, evidence] of requirements) if (condition.test(requested) && !evidence.test(name)) return false;
     // A flavor or ingredient mentioned inside a different food does not make it the requested ingredient.
     const composed = ['tuna', 'sardine', 'mackerel', 'chips', 'crisps', 'biscuit', 'cookie', 'cracker', 'sausage', 'mortadella', 'nuggets', 'burger', 'soup'];

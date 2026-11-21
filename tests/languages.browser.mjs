@@ -18,7 +18,7 @@ try{
  let release;const barrier=new Promise(resolve=>{release=resolve;});let count=0,observedBody;
  await page.route('**/api/chat',async route=>{
   observedBody=route.request().postDataJSON();count++;
-  if(count===1){await route.fulfill({status:200,contentType:'application/x-ndjson',body:JSON.stringify({type:'text',delta:'A freshly prepared meal with pasta, chicken and a creamy sauce.',language:'en'})+'\n'+JSON.stringify({type:'result',reply:{text:'A freshly prepared meal with pasta, chicken and a creamy sauce. Here is the complete answer to your question.',language:'en',products:[],mode:'ai'}})+'\n'});}
+  if(count===1){await route.fulfill({status:200,contentType:'application/x-ndjson',body:JSON.stringify({type:'text',delta:'A freshly prepared meal with pasta, chicken and a creamy sauce.',language:'en'})+'\n'+JSON.stringify({type:'result',reply:{text:'A freshly prepared meal with pasta, chicken and a creamy sauce. Here is the complete answer to your question.',language:'en',products:[],mode:'ai'}})});}
   else {await barrier;await route.fulfill({json:{text:'$2.85',language:'en',priceOnly:true,products:[],mode:'ai'}});}
  });
  await page.locator('#question').fill('How can I make chicken Alfredo?');await page.locator('.send').click();

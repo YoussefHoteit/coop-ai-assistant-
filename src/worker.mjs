@@ -317,6 +317,7 @@ const scopeSchema = {
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
 
 const rules = [
+  'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
   'You are the Al Makhazen COOP shopping assistant for its complete multi-department catalog. Follow the response language specified below for the entire reply, including recipe titles, steps, ingredients and quantities. Retain original brand names or foreign terms only when they clarify the answer.',
   'Keep the reply strictly within COOP shopping, all retail products and services, shopping lists, product bundles, recipes and food information. Electronics, car chargers, socks and seasonal clothing, stationery, pens, pencils, backpacks, pencil cases, toys, household goods, baby care, personal care and pet supplies are fully in scope. Product lookup requests remain in scope even when no matching product is found. Allow short greetings and relevant follow-ups.',
   'For a shopping kit, search separately for each needed product type, select actual available catalog products and return a products card (recipe=null). For a third-grade school kit, consider a backpack, pencil case, ordinary pencils or pens, notebooks, eraser, sharpener, ruler, colored pencils and glue as appropriate. Clearly explain requested essentials that have no suitable catalog match; do not invent a pencil case, regular writing pen or contents of an unspecified writing set. Correction-fluid pens and whiteboard markers are not substitutes for ordinary writing pens. Describe the kit as a suggestion, not a confirmed school requirement. Do not claim the backpack has been physically packed or ordered.',
@@ -404,9 +405,20 @@ async function requestOpenAIOnce(env, body, signal, onText) {
     body: JSON.stringify({ ...body, store: false, ...(onText && { stream: true }) }),
     signal,
   });
-  if (!response.ok) { const error = new Error('OpenAI returned HTTP ' + response.status + '.'); error.retryable = response.status >= 500; throw error; }
+  if (!response.ok) {
+    const info=await response.json().catch(()=>null);
+    const error=new Error('OpenAI returned HTTP '+response.status+'.');
+    error.retryable=response.status>=500||response.status===408||(response.status===429&&info?.error?.code!=='insufficient_quota');
+    error.retryAfterMs=Math.max(0,Math.min(1000,Number(response.headers.get('retry-after'))*1000||150));
+    throw error;
+  }
   const complete = value => {
-    if (value?.status === 'incomplete') { const error = new Error('Incomplete model output.'); error.retryable = value.incomplete_details?.reason === 'max_output_tokens'; throw error; }
+    if (value?.status === 'incomplete') {
+      const text=value.output?.flatMap(item=>item.type==='message'?item.content||[]:[]).find(item=>item.type==='output_text')?.text;
+      let valid=false;try{valid=Boolean(text&&JSON.parse(text));}catch{}
+      if (!valid) { const error = new Error('Incomplete model output.'); error.retryable = value.incomplete_details?.reason === 'max_output_tokens'; throw error; }
+    }
+    if(value?.status==='failed') {const error=new Error('The provider could not complete the response.');error.retryable=true;throw error;}
     return value.output ?? [];
   };
   if (!onText || response.headers.get('content-type')?.includes('application/json')) return complete(await response.json());
@@ -414,22 +426,25 @@ async function requestOpenAIOnce(env, body, signal, onText) {
   let buffer = '';
   let text = '';
   let textItem;
+  function frameResult(frame) {
+      const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+      if (!data || data === '[DONE]') return;
+      const event = JSON.parse(data);
+      if (event.type === 'response.completed') return { output:complete(event.response) };
+      if (event.type === 'response.incomplete') return { output:complete({...event.response,status:'incomplete'}) };
+      if (['error', 'response.failed'].includes(event.type)) { const error = new Error('Incomplete OpenAI stream.'); error.retryable = event.type === 'response.failed'||['server_error','rate_limit_exceeded'].includes(event.error?.code);throw error; }
+      if (event.type !== 'response.output_text.delta') return;
+      textItem ??= event.item_id;
+      if (event.item_id !== textItem) return;
+      text += event.delta;
+      onText(text);
+  }
   for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
     const frames = (buffer + chunk).split(/\r?\n\r?\n/);
     buffer = frames.pop();
-    for (const frame of frames) {
-      const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
-      if (!data || data === '[DONE]') continue;
-      const event = JSON.parse(data);
-      if (event.type === 'response.completed') return complete(event.response);
-      if (['error', 'response.failed', 'response.incomplete'].includes(event.type)) { const error = new Error('Incomplete OpenAI stream.'); error.retryable = event.type === 'response.incomplete' && event.response?.incomplete_details?.reason === 'max_output_tokens'; throw error; }
-      if (event.type !== 'response.output_text.delta') continue;
-      textItem ??= event.item_id;
-      if (event.item_id !== textItem) continue;
-      text += event.delta;
-      onText(text);
-    }
+    for (const frame of frames) { const result=frameResult(frame);if(result)return result.output; }
   }
+  if(buffer.trim()){const result=frameResult(buffer);if(result)return result.output;}
   const error = new Error('The OpenAI stream ended without a completed reply.'); error.retryable = true; throw error;
 }
 
@@ -439,6 +454,7 @@ async function requestOpenAI(env, body, signal, onText) {
     catch(error) {
       if (attempt || signal?.aborted || !(error.retryable || error instanceof SyntaxError || error instanceof TypeError)) throw error;
       onText?.('');
+      if(error.retryAfterMs)await new Promise(resolve=>setTimeout(resolve,error.retryAfterMs));
       body={...body,max_output_tokens:Math.min(9000,Math.ceil(body.max_output_tokens*1.75))};
       console.warn('Retrying incomplete or transient model response: '+body.text?.format?.name);
     }
@@ -505,7 +521,15 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
   const stockQuestion = /\b(?:do (?:you|they) (?:have|sell|stock)|you (?:don.t|dont|do not) have|avez.vous|vendez.vous)\b|عندكن|عندكم|3andkon|3andkun/iu.test(input);
   const plannedQueries=Array.isArray(plan.queries)?plan.queries.filter(q=>typeof q==='string'&&q.trim().length>1).slice(0,12).map(q=>q.slice(0,100)):[];
   const initialQueries=plannedQueries.length?plannedQueries:stockQuestion?shoppingLookupQueries(input):[];
-  const initialMatches=initialQueries.map(query=>({query,results:(plan.intent==='recipe'?recipeInventory.candidates({name:query,catalogQuery:query},5):searchInventory(query).slice(0,6))})).filter(group=>group.results.length);
+  const initialMatches=initialQueries.map(query=>{
+    const results=plan.intent==='recipe'?recipeInventory.candidates({name:query,catalogQuery:query},3):searchInventory(query).slice(0,6);
+    if(plan.intent!=='recipe')return{query,results};
+    const info=productTaxonomy.queryInfo(query);
+    const exact=results.filter(p=>info.attributes.every(attribute=>productTaxonomy.records.get(p.id)?.attributes.includes(attribute)));
+    if(exact.length)return{query,results:exact};
+    const related=info.types.length&&!info.qualifiers.length&&!info.brands.length?products.filter(p=>p.available===true&&info.types.includes(productTaxonomy.records.get(p.id)?.productType)).slice(0,4):results;
+    return {query,relatedVarietiesOnly:true,results:related};
+  }).filter(group=>group.results.length);
   const initialProducts=[...new Map(initialMatches.flatMap(group=>group.results).map(product=>[product.id,product])).values()];
   const retrieved=new Set(initialProducts.map(product=>product.id));
   const conversation=[{role:'user',content:JSON.stringify({earlierMessages:history,message:input,
@@ -513,7 +537,6 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     requestIntent:plan.intent||null,serverProductMatches:initialMatches.map(g=>({...g,results:g.results.map(promptProduct)}))})}];
   const priceInstructions = priceOnly ? '\nThis is a price-only request. Look up the exact product or products being asked about and return their IDs in items. Leave answer empty because the app displays the listed price directly.' : '';
 
-  let languageRetried = false;
   let formatRetried = false;
   let toolRounds=0;
   for (let round = 0; round < 7; round++) {
@@ -535,7 +558,9 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       input: conversation,
       max_output_tokens: 5000,
       tools: [inventoryTool, alternativeTool],
-      tool_choice: toolRounds >= 3 ? 'none' : 'auto',
+      // The server searches the complete inventory again for every generated ingredient.
+      // Recipe writing does not need several serial calls to repeat the same lookups.
+      tool_choice: plan.intent==='recipe' || toolRounds >= 3 ? 'none' : 'auto',
       ...(reasoningModel.test(model) && {
         reasoning: { effort: 'low' },
         include: ['reasoning.encrypted_content'],
@@ -572,7 +597,10 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     let reply;
     try { reply = structuredReply(output); } catch { /* A partial JSON reply is repaired within this request. */ }
     if (reply?.inScope === false) return { text: messages[lang].scope };
-    if (reply?.inScope !== true) {
+    const shapeValid=reply?.inScope===true&&typeof reply.answer==='string'&&Array.isArray(reply.items)&&
+      (!reply.recipe||(typeof reply.recipe.title==='string'&&Number.isInteger(reply.recipe.servings)&&
+        Array.isArray(reply.recipe.steps)&&reply.recipe.steps.every(step=>typeof step==='string')));
+    if (!shapeValid) {
       if (formatRetried) throw new Error('Invalid shopping reply.');
       formatRetried=true;
       conversation.push({role:'user',content:'Return a complete valid shopping_reply JSON object using the supplied schema. Keep the scope and language requirements, and use only verified product IDs. The previous response was incomplete or malformed.'});
@@ -580,10 +608,9 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     }
     if (!replyUsesCorrectScript(reply, lang) || mentionsInternalData(reply)) {
       if (shown) publish('', lang);
-      if (languageRetried) throw Object.assign(new Error('Reply language did not match the shopper.'), { code: !replyUsesCorrectScript(reply, lang) ? 'reply_language' : 'reply_wording' });
-      languageRetried = true;
-      conversation.push(...output, { role: 'user', content: 'Rewrite the same shopping reply in the required response language: ' + replyLanguageInstructions[lang] + ' Preserve product IDs, facts and quantities. Correct every text field, including recipe steps and ingredient names. Speak as COOP: use we have/we offer or the matching local phrase. Never mention catalogs, inventory, snapshots, databases, sources or earlier search mistakes. Do not say I found.' });
-      continue;
+      reply=await repairCustomerProse(reply,replyLanguageInstructions[lang],async body=>structuredReply(await requestOpenAI(env,{
+        model,...body,...(reasoningModel.test(model)&&{reasoning:{effort:'low'}}),
+      },signal)),candidate=>replyUsesCorrectScript(candidate,lang)&&!mentionsInternalData(candidate));
     }
     const { answer, recipe, items, showNutrition } = reply;
     if (typeof answer !== 'string' || !Array.isArray(items)) throw new Error('Invalid model output.');
@@ -721,7 +748,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   let scopeAllowed = false;
   try {
     const model = configuredModel(env);
-    const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(42000)]);
+    const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(52000)]);
     const decision = await shoppingDecision(env, model, input, history, recentLanguage, signal);
     lang = chooseReplyLanguage(input, recentLanguage, decision.language);
     if (!decision.allowed) return scopeReply();

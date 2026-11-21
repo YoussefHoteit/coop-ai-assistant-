@@ -94,6 +94,14 @@ Leave unknown fields blank. Use in stock, out of stock, or unknown for availabil
 
 The import is validated before replacing the existing local snapshot. A multi-branch export requires choosing a branch. The approved snapshot replaces the preview inventory. It is ignored by Git. Live inventory and price updates require an approved feed and a refresh mechanism. Public listings help seed the demo. Screenshots can fill gaps in product labels.
 
+### Recipe reliability and showcase checks
+
+Recipe generation uses ingredient candidates retrieved in advance and resolves every returned ingredient against the complete inventory. Planned recipes skip redundant model tool rounds. Groups containing other varieties are marked as alternatives, without relaxing explicit dietary, brand or variety constraints. Seasoning names cannot override the commodity type of an actual food. Raw meat ingredient matching excludes unsolicited prepared forms and cold cuts.
+
+Language and wording repairs run on a separate text-only schema. IDs, prices, stock, servings, grams, preparation order and recipe references are retained, and repairs that change numeric amounts are rejected. The server has a 52-second total deadline under the platform's 60-second function limit; the browser waits 57.5 seconds. Temporary provider errors and incomplete responses have bounded recovery. Complete terminal streaming frames are accepted even without a final separator. Failures include a request ID and coarse error code; logs contain stage and duration without shopper messages, provider output or credentials.
+
+Run `npm test` for deterministic backend regressions, then the browser suites for responsive controls, copy/paste, streaming/context/cancellation, viewport changes and image gestures. For an explicitly authorized real-provider check, set `LIVE_TEST_URL=https://coop-ai-assistant.vercel.app` and run `node tests/showcase.live.mjs`. This opt-in suite tests fresh multilingual recipes, context, price follow-ups, brands, non-food goods, school kits, budgets, label uncertainty and scope. It incurs normal provider usage and writes its detailed results under ignored `tmp/`.
+
 ### Product image previews
 
 Product replies, recipe ingredients and both shopping-list views share an image viewer. Hover with a mouse or focus a thumbnail with the keyboard for a floating enlargement. Click or tap opens a modal image with a close button, backdrop dismissal and Escape support. Touch and hold for 350 ms shows a temporary preview; release or cancel dismisses it without opening a modal. Swiping before the hold threshold preserves normal scrolling. Broken thumbnails keep the original fallback and cannot open an empty viewer. Product names and accessible controls follow the current language.

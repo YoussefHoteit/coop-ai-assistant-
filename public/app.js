@@ -408,7 +408,10 @@ async function readChatReply(response, onText) {
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) throw new Error('Chat stream ended before the reply was complete.');
+      if (done) {
+        if (buffer.trim()) { const event=JSON.parse(buffer); if(event.type==='result')return event.reply; }
+        throw new Error('Chat stream ended before the reply was complete.');
+      }
       const lines = (buffer + value).split('\n');
       buffer = lines.pop();
       for (const line of lines) {
@@ -467,7 +470,7 @@ async function sendMessage(raw) {
 
   try {
     const writeReply = replyWriter(controller.signal);
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(48500)]);
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(57500)]);
     const response = await fetch('/api/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
       body: JSON.stringify({ message: content, history, lang: recentLanguage, context }),

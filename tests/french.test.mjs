@@ -67,11 +67,14 @@ test('French AI replies preserve history, enforce French and correct English out
       assert.equal(JSON.parse(body.input).recentLanguage, 'fr');
       return Response.json({ output: output({ allowed: true, language: 'fr', priceOnly: false }) });
     }
-    assert.match(body.instructions, /French. Write all prose/);
-    assert.ok(body.input[0].content.includes('Earlier shopping context'));
-    if (calls === 2) return Response.json({ output: output(result('You can prepare pasta.')) });
-    assert.match(body.input.at(-1).content, /Rewrite the same shopping reply/);
-    return Response.json({ output: output(result('Vous pouvez préparer des pâtes au poulet.')) });
+    if (calls === 2) {
+      assert.match(body.instructions, /French. Write all prose/);
+      assert.ok(body.input[0].content.includes('Earlier shopping context'));
+      return Response.json({ output: output(result('You can prepare pasta.')) });
+    }
+    assert.equal(body.text.format.name,'shopping_prose');
+    assert.match(JSON.parse(body.input[0].content).language,/French/);
+    return Response.json({output:output({texts:[{key:'answer',text:'Vous pouvez préparer des pâtes au poulet.'}]})});
   };
   try {
     const reply = await chat('Et pour 6 personnes ?', { lang: 'fr', history: [{ role: 'assistant', content: 'Earlier shopping context' }] }, { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' });

@@ -56,9 +56,10 @@ const taxonomy = (await readFile(join(project, 'src', 'inventory-taxonomy.mjs'),
 const inventorySearch = (await readFile(join(project, 'src', 'inventory-search.mjs'), 'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm, '');
 const recipeInventory = (await readFile(join(project, 'src', 'recipe-inventory.mjs'), 'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm, '');
 const recipeReview = (await readFile(join(project, 'src', 'recipe-review.mjs'), 'utf8')).replace(/^export /gm, '');
+const replyRepair = (await readFile(join(project, 'src', 'reply-repair.mjs'), 'utf8')).replace(/^export /gm, '');
 const source = await readFile(join(project, 'src', 'worker.mjs'), 'utf8');
 const worker = 'const ASSETS = ' + JSON.stringify(Object.fromEntries(entries)) + ';\nconst DATA = ' +
-  JSON.stringify(data) + ';\n' + nutrition + '\n' + language + '\n' + customer + '\n' + taxonomy + '\n' + inventorySearch + '\n' + recipeInventory + '\n' + recipeReview + '\n' + source;
+  JSON.stringify(data) + ';\n' + nutrition + '\n' + language + '\n' + customer + '\n' + taxonomy + '\n' + inventorySearch + '\n' + recipeInventory + '\n' + recipeReview + '\n' + replyRepair + '\n' + source;
 const output = join(project, 'dist');
 const workerPath = join(output, 'server', 'index.js');
 await mkdir(dirname(workerPath), { recursive: true });
