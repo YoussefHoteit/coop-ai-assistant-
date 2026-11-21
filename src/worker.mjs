@@ -632,7 +632,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
         details: Boolean(showNutrition), energy: showNutrition && product ? productEnergy(product, grams) : null };
     });
     const matchedProducts = [...new Map(matches.filter(entry => entry.id).map(entry => [entry.id, entry])).values()];
-    if (!recipe && !matchedProducts.length && initialProducts.length) {
+    if (!recipe && !matchedProducts.length && initialProducts.length && (stockQuestion || priceOnly || !plainReplyText(answer).trim())) {
       const items = initialProducts.slice(0, 8).map(product => ({ id: product.id, details: false }));
       return priceOnly ? priceReply(items, lang) : { text: customerMessages[lang].products, card: { kind: 'products', items } };
     }

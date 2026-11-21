@@ -80,3 +80,9 @@ test('well-formed structured output survives an incomplete status and malformed 
  globalThis.fetch=async()=>{calls++;if(calls===1)return Response.json({status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output:output(decision())});return Response.json({output:output(calls===2?{...answer('Hello'),recipe:{title:'Bad shape',servings:2,steps:'wrong'}}:answer('Hello.'))});};
  try{assert.equal((await replyFor('Hello')).text,'Hello.');assert.equal(calls,3);}finally{globalThis.fetch=previous;}
 });
+
+test('product fallback cannot replace an allergen warning or informational answer with a generic product list',async()=>{
+ const previous=fetch;let calls=0;
+ globalThis.fetch=async()=>{if(++calls===1)return Response.json({output:output(decision('en',{intent:'products',englishRequest:'Can you guarantee peanut-free chocolate?',queries:['chocolate']}))});return Response.json({output:output(answer('We cannot guarantee this without checking the product label and manufacturer allergen information.'))});};
+ try{const reply=await replyFor('Can you guarantee the chocolate products are completely peanut-free?');assert.equal(reply.mode,'ai');assert.match(reply.text,/cannot guarantee/);assert.equal(reply.card,null);assert.equal(calls,2);}finally{globalThis.fetch=previous;}
+});
