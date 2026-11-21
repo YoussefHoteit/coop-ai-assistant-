@@ -1,5 +1,7 @@
+import { createProductTaxonomy } from './inventory-taxonomy.mjs';
 // Match recipe ingredients to edible product types, not just words in any product.
 export function createRecipeInventory(products, baseSearch, normalize) {
+  const taxonomy = baseSearch.taxonomy || createProductTaxonomy(products,{},normalize);
   const byId = new Map(products.map(product => [product.id, product]));
   const food = new Set(['produce', 'dairy', 'meat', 'fish', 'bakery', 'pantry', 'ready', 'frozen', 'organic', 'snacks', 'beverages', 'coffee-tea']);
   const category = (product, key) => product.category === key || product.additionalCategories?.includes(key);
@@ -38,7 +40,7 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     ...[
       ['rice', ['rice', 'riz', 'رز', 'رزّ', 'rezz']], ['lentils', ['lentils', 'lentil', 'lentilles', 'عدس', '3adas']],
       ['cumin', ['cumin', 'كمون', 'kammoun']], ['paprika', ['paprika', 'بابريكا']], ['sumac', ['sumac', 'سماق', 'somma2']],
-    ].map(([key, terms]) => ({ key, terms, accepts: p => pantrySpice(p) && named(p, new RegExp('\\b' + key.replace(/s$/, '') + 's?\\b')) && !named(p, /cake|pudding|flour/), queries: [key] })),
+    ].map(([key, terms]) => ({ key, terms, accepts: p => taxonomy.records.get(p.id)?.productType === key && !named(p, /cake|pudding|flour/), queries: [key] })),
     ...[
       ['parsley', ['parsley', 'persil', 'بقدونس', 'ba2dounes']], ['tomatoes', ['tomato', 'tomatoes', 'tomates', 'بندورة', 'طماطم']],
       ['mint', ['mint', 'menthe', 'نعناع', 'na3na3']], ['lemons', ['lemon', 'lemons', 'citron', 'citrons', 'حامض', 'ليمون', '7amod']],
@@ -61,6 +63,8 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const value = normalize(query);
     const exact = profiles.find(profile => profile.terms.includes(value));
     if (exact) return exact;
+    // Never "correct" a recognized type into a different food (for example chicken/chickpea).
+    if (taxonomy.queryInfo(value).types.length) return undefined;
     // Correct short ingredient typos only; never fuzz brands, IDs, full questions or dietary qualifiers.
     if (!/^[a-z ]{6,32}$/.test(value) || value.split(' ').length > 3) return undefined;
     const candidates = profiles.flatMap(profile => profile.terms.filter(term => /^[a-z ]{6,32}$/.test(term) && term.slice(0, 3) === value.slice(0, 3) && Math.abs(term.length - value.length) <= 2)
@@ -85,6 +89,9 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const requested = normalize(queryFor(entry) + ' ' + (entry.name || ''));
     const name = normalize(product.name.en);
     const profile = profileFor(query) || profileFor(entry.name || '');
+    if (!taxonomy.compatible(query,product)) return false;
+    const localized = taxonomy.queryInfo(entry.name || '');
+    if (localized.types.length && !taxonomy.compatible(localized,product)) return false;
     if (profile && !profile.accepts(product)) return false;
     for (const [condition, evidence] of requirements) if (condition.test(requested) && !evidence.test(name)) return false;
     // A flavor or ingredient mentioned inside a different food does not make it the requested ingredient.
@@ -103,7 +110,7 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const key = normalize(query + '|' + (entry.name || ''));
     if (candidateCache.has(key)) return candidateCache.get(key).slice(0, limit);
     const profile = profileFor(query) || profileFor(entry.name || '');
-    const clean = normalize(query).replace(/\b(?:finely|roughly|chopped|diced|sliced|peeled|grated|minced|to taste|for garnish)\b/g, ' ').replace(/ +/g, ' ').trim();
+    const clean = normalize(query).replace(/\b(?:finely|roughly|chopped|diced|sliced|peeled|grated|minced|to taste|for garnish|freshly)\b/g, ' ').replace(/ +/g, ' ').trim();
     const words = clean.split(' ').filter(word => word.length > 2 && !['and', 'the', 'with', 'for'].includes(word));
     const searches = profile ? [profile.terms[0]] : [...new Set([query, clean, words.slice(-2).join(' '), ...words])].filter(Boolean).slice(0, 8);
     const pool = [...new Map(searches.flatMap(term => search(term)).map(product => [product.id, product])).values()];
@@ -112,7 +119,8 @@ export function createRecipeInventory(products, baseSearch, normalize) {
       const nameTokens = new Set(tokens(product.name.en));
       const overlap = requested.filter(word => nameTokens.has(word)).length;
       const plain = ['produce', 'dairy', 'meat', 'fish', 'pantry', 'bakery'].some(key => category(product, key));
-      return { product, score: overlap * 10 + Number(overlap === requested.length) * 15 + Number(plain) * 8 + Number(product.available === true) * 20 };
+      const meta = taxonomy.records.get(product.id), info = taxonomy.queryInfo(query);
+      return { product, score: overlap * 10 + Number(overlap === requested.length) * 15 + Number(plain) * 8 + Number(product.available === true) * 20 + Number(info.types.includes(meta.productType))*50 + info.attributes.filter(a=>meta.attributes.includes(a)).length*15 };
     }).sort((a, b) => b.score - a.score || a.product.name.en.localeCompare(b.product.name.en)).map(({ product }) => product);
     candidateCache.set(key, ranked);
     return ranked.slice(0, limit);
@@ -140,14 +148,19 @@ export function createRecipeInventory(products, baseSearch, normalize) {
       const exact = matches.find(product => normalize(product.name.en) === normalize(query) || product.id === query || product.sku === query);
       // Full ingredient phrases may occur within branded names or in a different word order.
       const words = tokens(query);
+      const info = taxonomy.queryInfo(query);
+      const equivalent = info.types.length && matches.find(product=>{
+        const meta=taxonomy.records.get(product.id);
+        return info.types.includes(meta.productType) && info.attributes.every(a=>meta.attributes.includes(a)) && taxonomy.compatible(info,product);
+      });
       const phrase = words.length >= 2 && matches.find(product => {
         const name = new Set(tokens(product.name.en));
         return words.every(word => name.has(word));
       });
-      return exact || phrase || (existing && eligible(entry, existing) ? existing : null);
+      return exact || phrase || equivalent || (existing && eligible(entry, existing) ? existing : null);
     }
     return matches.find(product => product.available === true) ||
       (existing && eligible(entry, existing) ? existing : matches[0]) || null;
   }
-  return { search, resolve, candidates, eligible };
+  return { search, resolve, candidates, eligible, taxonomy };
 }

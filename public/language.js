@@ -2,7 +2,7 @@ export const replyLanguages = ['en', 'ar', 'arz', 'fr'];
 
 const arabicScript = /(?=\p{L})\p{Script=Arabic}/u;
 const latinScript = /\p{Script=Latin}/u;
-const arabiziWords = /\b(?:marhaba|ahlan|badd[iey]|bade|badi|badna|baddna|ne7na|nehna|na7na|ma3e|ma3i|ma3na|ma3ak|3ande|3andi|3and\w*|shu|shou|kif|keef|adde|ade|addesh|addeish|2adde|2ade|2addesh|kam|hayda|hayde|haydi|haydol|halla2|hala2|bkam|bikaffi|bekaffe|bikaffe|ta3mol|ta3mel|a3mol|a3mel|a3mlo|a3mela|3mela|3mlo|bte2dar|fina|bteswa|bteswe|badde|akhas|arkhas|ar5as|ghale|ghali|nekol|nakol|nakoul|nkol|netbokh|ntbokh|matbakh|wasfe|wasfet|salam|yalla|khalas|tayeb|tayyeb)\b|\b[a-z]+[23789][a-z]+\b|\b[23789][a-z]{3,}\b/i;
+const arabiziWords = /\b(?:marhaba|ahlan|badd[iey]|bade|badi|badna|baddna|ne7na|nehna|na7na|ma3e|ma3i|ma3na|ma3ak|3ande|3andi|3and\w*|shu|shou|kif|keef|adde|ade|addesh|addeish|2adde|2ade|2addesh|kam|hayda|hayde|haydi|haydol|halla2|hala2|bkam|bikaffi|bekaffe|bikaffe|ta3mol|ta3mel|a3mol|a3mel|a3mlo|a3mela|3mela|3mlo|bte2dar|fina|bteswa|bteswe|badde|akhas|arkhas|ar5as|ghale|ghali|nekol|nakol|nakoul|nkol|netbokh|ntbokh|matbakh|wasfe|wasfet|salam|yalla|khalas|tayeb|tayyeb)\b|\b[a-z]+[2356789][a-z]+(?:[2356789][a-z]+)*\b|\b[2356789][a-z]{3,}\b/i;
 
 export function isFrench(text) {
   const folded = text.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[’']/g, ' ');
@@ -12,7 +12,10 @@ export function isFrench(text) {
 export const replyLocale = language => language === 'ar' ? 'ar-LB' : language === 'fr' ? 'fr-FR' : 'en-US';
 
 export function isArabizi(text) {
-  return !arabicScript.test(text) && arabiziWords.test(text);
+  if (arabicScript.test(text) || !arabiziWords.test(text)) return false;
+  const lexical = text.replace(/\b(?=[a-z0-9]*\d)[a-z0-9]+\b/gi, token => /^(?:bade|baddi|badde|badi|badna)[2356789]/i.test(token) ? 'bade' : '');
+  const otherRequest = /\b(?:do you|how much|how do|what is|which|can you|could you|i need|i want|i would like|are there)\b/i.test(text) || isFrench(text);
+  return !otherRequest || arabiziWords.test(lexical);
 }
 
 export function detectReplyLanguage(text, recentLanguage = 'en') {

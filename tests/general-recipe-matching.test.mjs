@@ -93,7 +93,7 @@ test('a failed final review preserves the recipe choices and never fabricates av
   assert.equal(reviewed[1], null);
 });
 
-test('a recipe reaches the UI only after unresolved milk and eggs have been reviewed', async () => {
+test('known ingredient families are resolved before display without an extra model matching call', async () => {
   const previous = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async (_url, options) => {
@@ -117,9 +117,9 @@ test('a recipe reaches the UI only after unresolved milk and eggs have been revi
     }), { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' });
     const frames = (await response.text()).trim().split('\n').map(JSON.parse);
     const reply = frames.at(-1).reply;
-    assert.equal(calls, 3);
+    assert.equal(calls, 2);
     assert.equal(reply.mode, 'ai');
-    assert.deepEqual(reply.card.items.map(item => item.id), ['167437', '180085', '179938']);
+    assert.deepEqual(reply.card.items.map(item => inventory.taxonomy.records.get(item.id).productType), ['flour', 'milk', 'eggs']);
     assert.deepEqual(reply.card.items.map(item => item.amount), ['200 g', '250 ml', '2']);
     assert.equal(reply.card.servings, 2);
     assert.ok(reply.products.every(product => product.available === true));

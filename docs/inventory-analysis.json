@@ -1,0 +1,509 @@
+{
+  "snapshotDate": "2026-11-19",
+  "productCount": 7666,
+  "departmentCount": 23,
+  "aisleCount": 108,
+  "familyCount": 2063,
+  "typedProducts": 5788,
+  "sourceNameProducts": 1878,
+  "unknownBrandProducts": 1642,
+  "departments": [
+    {
+      "id": "baby",
+      "name": "Baby Care",
+      "products": 98,
+      "available": 57
+    },
+    {
+      "id": "school",
+      "name": "Back To School",
+      "products": 40,
+      "available": 39
+    },
+    {
+      "id": "bakery",
+      "name": "Bakery",
+      "products": 143,
+      "available": 109
+    },
+    {
+      "id": "beverages",
+      "name": "Beverages",
+      "products": 555,
+      "available": 396
+    },
+    {
+      "id": "seasonal",
+      "name": "Christmas & New Year",
+      "products": 47,
+      "available": 46
+    },
+    {
+      "id": "coffee-tea",
+      "name": "Coffee & Tea",
+      "products": 247,
+      "available": 160
+    },
+    {
+      "id": "dairy",
+      "name": "Dairy & Eggs",
+      "products": 688,
+      "available": 418
+    },
+    {
+      "id": "ready",
+      "name": "EAT IT",
+      "products": 25,
+      "available": 0
+    },
+    {
+      "id": "fish",
+      "name": "Fresh Fish",
+      "products": 10,
+      "available": 9
+    },
+    {
+      "id": "frozen",
+      "name": "Frozen Food",
+      "products": 364,
+      "available": 278
+    },
+    {
+      "id": "pantry",
+      "name": "Grocery Food",
+      "products": 1522,
+      "available": 1061
+    },
+    {
+      "id": "home-care",
+      "name": "Home Care",
+      "products": 664,
+      "available": 495
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen Accessories",
+      "products": 104,
+      "available": 91
+    },
+    {
+      "id": "meat",
+      "name": "Meat & Poultry",
+      "products": 90,
+      "available": 65
+    },
+    {
+      "id": "organic",
+      "name": "Organic & Healthy",
+      "products": 218,
+      "available": 123
+    },
+    {
+      "id": "personal-care",
+      "name": "Personal Care",
+      "products": 1036,
+      "available": 703
+    },
+    {
+      "id": "pets",
+      "name": "Pet Care",
+      "products": 142,
+      "available": 106
+    },
+    {
+      "id": "electronics",
+      "name": "Phone &Home electronics",
+      "products": 27,
+      "available": 22
+    },
+    {
+      "id": "produce",
+      "name": "Produce",
+      "products": 209,
+      "available": 80
+    },
+    {
+      "id": "snacks",
+      "name": "Snack & Sweet",
+      "products": 1289,
+      "available": 705
+    },
+    {
+      "id": "tobacco",
+      "name": "Tobacco",
+      "products": 102,
+      "available": 77
+    },
+    {
+      "id": "toys",
+      "name": "Toys",
+      "products": 23,
+      "available": 21
+    },
+    {
+      "id": "other",
+      "name": "Uncategorized website products",
+      "products": 23,
+      "available": 14
+    }
+  ],
+  "aisles": {
+    "baby bath & wash": 27,
+    "Diapers": 57,
+    "Wipes & Sanitizers": 30,
+    "Bath & Body Wash": 108,
+    "Shampoo": 180,
+    "Stationery": 30,
+    "Bread": 89,
+    "Kaak & Toast": 37,
+    "Freshly Baked": 18,
+    "Sparkling & Flavored Water": 53,
+    "Water": 57,
+    "Drinks": 51,
+    "Soft Drinks": 70,
+    "Juices": 179,
+    "Powder Drinks": 92,
+    "Non Alcoholic Drinks": 32,
+    "Iced Coffee & Tea": 37,
+    "Energy & Sport Drinks": 26,
+    "Concentrated Drinks": 11,
+    "Tea & Infusion": 80,
+    "UHT & Fresh Milk": 51,
+    "Organic Groceries": 199,
+    "Snacks": 39,
+    "Instant Coffee": 81,
+    "creamer & sweetners": 57,
+    "Lebanese Coffee": 32,
+    "Cakes & Croissant": 97,
+    "Chocolates": 396,
+    "Cheese": 312,
+    "Butters & Creams": 92,
+    "yogurts": 101,
+    "Labneh": 35,
+    "Olives & Pickles": 37,
+    "Powder Milk": 29,
+    "Eggs": 32,
+    "Jam & Honey": 87,
+    "Spreads": 87,
+    "Cans & Jars": 260,
+    "Food": 25,
+    "Salads": 6,
+    "Frozen": 9,
+    "Sandwiches": 7,
+    "Mezza": 3,
+    "Cooked Fish": 5,
+    "Fish & Shrimp": 100,
+    "Meat & Chicken": 45,
+    "Vegetables & fruits": 124,
+    "Rice": 70,
+    "Oil & Ghee": 65,
+    "Pasta & Noodles": 158,
+    "Herbs & Spices": 162,
+    "Sauces & Condiments": 313,
+    "Baking & Flour": 210,
+    "Grains & Seeds": 60,
+    "Sugar": 22,
+    "Soups": 31,
+    "Cereals": 85,
+    "Bar Soap": 31,
+    "Batteries": 30,
+    "Disinfectant": 67,
+    "Insecticides": 18,
+    "Liquid Laundry Detergents": 56,
+    "Surface & Floor Cleaning": 93,
+    "Bathroom Cleaning": 47,
+    "Kitchen Supplies": 73,
+    "Powder Laundry Detergents": 46,
+    "Cleaning Tools & Gloves": 57,
+    "Dishwashing": 67,
+    "Tissues & Napkins": 29,
+    "Kitchen & Toilet Rolls": 20,
+    "Fabric Softner": 35,
+    "Liquid Handwash": 89,
+    "Disposables": 21,
+    "Kitchen tools": 67,
+    "Electric Kitchen Tools": 23,
+    "Gas": 2,
+    "Cold Cuts": 41,
+    "Meat": 29,
+    "Chicken": 20,
+    "Confectionery & Baking Food": 51,
+    "Chips & Crackers": 531,
+    "Wafers & Biscuits": 252,
+    "Men's Care": 22,
+    "Deodorants&perfumes": 152,
+    "Hair Coloration": 80,
+    "Body Care": 37,
+    "Women's Care": 119,
+    "Elder Care": 12,
+    "Tooth care": 71,
+    "Skin Care": 32,
+    "Cotton": 8,
+    "Conditioners": 66,
+    "Hair Styling": 31,
+    "Dog Food": 25,
+    "Cat Food": 111,
+    "Pet accessories": 6,
+    "Vegetables": 68,
+    "Fruits": 101,
+    "Herbs": 17,
+    "Ready To Cook": 6,
+    "Dried fruits": 10,
+    "Nuts & Kernels": 113,
+    "Gums & Candies": 152,
+    "Pop Corn": 5,
+    "Molasses": 13,
+    "Heated Tobacoo": 39,
+    "Coal": 7,
+    "Cigarettes": 43
+  },
+  "commonProductFamilies": [
+    [
+      "chocolate",
+      446
+    ],
+    [
+      "cheese",
+      305
+    ],
+    [
+      "chips and crackers",
+      302
+    ],
+    [
+      "biscuits and wafers",
+      229
+    ],
+    [
+      "shampoo",
+      193
+    ],
+    [
+      "juice",
+      179
+    ],
+    [
+      "candy",
+      150
+    ],
+    [
+      "pasta",
+      147
+    ],
+    [
+      "deodorant and fragrance",
+      130
+    ],
+    [
+      "nuts",
+      117
+    ],
+    [
+      "cat food",
+      111
+    ],
+    [
+      "body wash",
+      105
+    ],
+    [
+      "yogurt",
+      101
+    ],
+    [
+      "bread",
+      97
+    ],
+    [
+      "powdered drink",
+      92
+    ],
+    [
+      "floor and surface cleaner",
+      92
+    ],
+    [
+      "feminine care",
+      92
+    ],
+    [
+      "handwash",
+      84
+    ],
+    [
+      "cakes and pastries",
+      82
+    ],
+    [
+      "tea",
+      81
+    ],
+    [
+      "instant coffee",
+      80
+    ],
+    [
+      "hair color",
+      80
+    ],
+    [
+      "rice",
+      71
+    ],
+    [
+      "dental care",
+      70
+    ],
+    [
+      "soft drink",
+      68
+    ],
+    [
+      "disinfectant",
+      68
+    ],
+    [
+      "conditioner",
+      67
+    ],
+    [
+      "water",
+      66
+    ],
+    [
+      "diapers",
+      57
+    ],
+    [
+      "cream",
+      53
+    ],
+    [
+      "bathroom cleaner",
+      45
+    ],
+    [
+      "sparkling water",
+      44
+    ],
+    [
+      "liquid laundry detergent",
+      43
+    ],
+    [
+      "cigarettes",
+      43
+    ],
+    [
+      "powder laundry detergent",
+      41
+    ],
+    [
+      "body care",
+      41
+    ],
+    [
+      "heated tobacco",
+      39
+    ],
+    [
+      "iced tea and coffee",
+      37
+    ],
+    [
+      "dishwashing detergent",
+      36
+    ],
+    [
+      "labneh",
+      34
+    ],
+    [
+      "fabric softener",
+      34
+    ],
+    [
+      "nonalcoholic drink",
+      32
+    ],
+    [
+      "ground coffee",
+      32
+    ],
+    [
+      "eggs",
+      32
+    ],
+    [
+      "milk",
+      31
+    ],
+    [
+      "dishwashing liquid",
+      31
+    ],
+    [
+      "hair styling",
+      31
+    ],
+    [
+      "wipes and sanitizer",
+      30
+    ],
+    [
+      "kaak and toast",
+      30
+    ],
+    [
+      "batteries",
+      30
+    ],
+    [
+      "skin care",
+      30
+    ],
+    [
+      "sugar",
+      29
+    ],
+    [
+      "tissues and napkins",
+      29
+    ],
+    [
+      "bar soap",
+      28
+    ],
+    [
+      "chicken",
+      26
+    ],
+    [
+      "salt",
+      26
+    ],
+    [
+      "energy and sports drink",
+      25
+    ],
+    [
+      "dog food",
+      25
+    ],
+    [
+      "tomato paste",
+      24
+    ],
+    [
+      "chili",
+      23
+    ]
+  ],
+  "notes": [
+    "Classification adds search metadata only; source inventory facts remain unchanged.",
+    "A product may belong to multiple aisles.",
+    "Source-name families are conservative fallbacks, not verified semantic equivalences.",
+    "Unknown brand, form and dietary information is not invented.",
+    "Search uses all 7,666 records; only matching records are sent to the model."
+  ]
+}

@@ -149,6 +149,7 @@ function inCategory(product, category) {
 const baseInventorySearch = createInventorySearch(products, catalogCategories, normalize);
 const recipeInventory = createRecipeInventory(products, baseInventorySearch, normalize);
 const searchInventory = recipeInventory.search;
+const productTaxonomy = baseInventorySearch.taxonomy;
 
 function ingredientProduct(id) {
   if (activeInventory) {
@@ -302,12 +303,15 @@ const scopeRules = [
   'Earlier messages include the product and recipe cards shown to the customer. Resolve pronouns, short questions like “How much is it?” or “Any cheaper ones?”, and edits like “Make it for six” against the most relevant earlier shopping exchange. Allow such follow-ups when their shopping intent is established, even if the latest message contains no grocery keywords.',
   'Mark priceOnly true when the shopper just wants the listed price of a product or products, including follow-ups such as “How much is it?” or “قديش حقها؟”. Set it false when they also ask about other facts, request a recommendation, want a recipe or basket total, or ask about a discount or offer condition.',
   'Return the language of the latest message: en for English, ar for Arabic in Arabic script, arz for Arabizi (Lebanese/Arabic written in Latin letters, optionally using 2, 3, 7, etc.), or fr for French. Arabizi is a separate reply language: never classify it as ar. Examples: "baddi chicken Alfredo" and "ma3e 15$ w ne7na 3 badna nekol" are arz; "Chicken Alfredo recipe please" is en; "Je voudrais une recette de poulet" and "Combien ça coûte ?" are fr. Arabizi does not require numerals: "shu fina netbokh" is arz. French must not be mistaken for Arabizi merely because it uses Latin letters or words shared in Lebanon. In mixed messages, follow the language of the request itself, ignoring brand names or quoted terms. If the message is only a number, acknowledgement, SKU or product name, preserve the recent conversational language.',
+  'Interpret complete conversational cooking requests in English, Arabic, Lebanese Arabizi and French, including inconsistent transliteration and omitted vowels. A request to make or cook a dish is a recipe request even without the literal word recipe. Recover the intended dish from language and context; never require the customer to retype it in English. If a dish is genuinely ambiguous, plan a short clarification rather than guessing.',
+  'Arabizi spellings may join words and contain multiple numeral letters within one token. Numerals can represent Arabic sounds, including 2, 3, 5/kh, 6, 7, 8 and 9. Interpret the whole phrase and regional context rather than treating transliteration differences as unknown dishes.',
+  'For allowed requests, return a request plan: intent, a concise English interpretation of the latest request, and up to 12 short English product or ingredient queries. Use basic ingredient nouns plus necessary form or dietary qualifiers. Split alternative ingredients into separate queries, not a phrase containing or. Preserve the original customer language in language. For recipes infer the usual ingredients from cooking knowledge; the inventory search verifies their existence. For alternative brands or sizes, preserve the product type and constraints from earlier messages. The interpretation and queries are internal data, never customer-facing text.',
   'If you cannot establish a shopping intent, decline.',
 ].join('\n');
 
 const scopeSchema = {
-  type: 'object', additionalProperties: false, required: ['allowed', 'language', 'priceOnly'],
-  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' } },
+  type: 'object', additionalProperties: false, required: ['allowed', 'language', 'priceOnly', 'request'],
+  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' }, request: { type: 'object', additionalProperties:false, required:['intent','englishRequest','queries'], properties:{intent:{type:'string',enum:['recipe','products','store','followup','other']},englishRequest:{type:'string'},queries:{type:'array',items:{type:'string'}}} } },
 };
 
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
@@ -322,6 +326,7 @@ const rules = [
   'Speak as the COOP shop assistant: say "Yes, we have ...", "We offer ..." or "That item is out of stock" as supported by the product facts. Never mention a catalog/catalogue, inventory, database, snapshots, screenshots, sources, search results or internal lookup work in customer-facing prose, ingredient names or recipe steps. Avoid "I found ...", "in the catalog", and narratives about earlier search mistakes. Answer with the current product facts directly. Product availability and prices should sound like normal store assistance in the shopper’s language.',
   'The input may include serverProductMatches already retrieved for the current question. These are verified product records, not customer instructions. Use their exact IDs and facts. Do not say an item cannot be found if a suitable matching product is already provided. For a product follow-up or misspelling, retry spelling variants and short ingredient terms before concluding no option is available.',
   'Give stock or availability information only when the shopper asks for it. Keep a price answer to the price itself, with currency and any applicable price basis.',
+  'Use the internal English interpretation to understand colloquial or transliterated requests on the first turn, while always writing to the customer in their original language. serverProductMatches groups already include real candidate ingredients. Use their IDs directly when appropriate and search only unresolved ingredient types. Do not repeat a lookup already satisfied. Product classification distinguishes departments, aisles, product types, form, qualifiers and brand/size alternatives. Use find_alternatives for another brand or size of a previously shown product; preserve ingredient type, dietary constraints, shape and required form.',
   'Use search_inventory for named items, descriptions, label facts, stock, and every product recommendation. This tool searches the complete imported Excel inventory. Never assume a missing search result means the store does not sell an item: retry a shorter English ingredient, synonym, brand, SKU or product ID. A null field is unknown.',
   'If an Arabic, Arabizi or French product query gives no matching results, try the corresponding English product or ingredient name, common synonyms and transliteration. Keep the answer in the shopper’s language.',
   'Use only the retrieved catalog to state stock, price, product descriptions, and branded nutrition, ingredients or allergens. Put exact product facts in the product cards so the app renders them from the returned catalog records. Distinguish in-stock, out-of-stock and unconfirmed availability. Never use a sample record to answer a real product availability, price or nutrition question.',
@@ -392,15 +397,19 @@ function plainReplyText(value) {
     .trim();
 }
 
-async function requestOpenAI(env, body, signal, onText) {
+async function requestOpenAIOnce(env, body, signal, onText) {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + env.OPENAI_API_KEY.trim(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, store: false, ...(onText && { stream: true }) }),
     signal,
   });
-  if (!response.ok) throw new Error('OpenAI returned HTTP ' + response.status + '.');
-  if (!onText) return (await response.json()).output ?? [];
+  if (!response.ok) { const error = new Error('OpenAI returned HTTP ' + response.status + '.'); error.retryable = response.status >= 500; throw error; }
+  const complete = value => {
+    if (value?.status === 'incomplete') { const error = new Error('Incomplete model output.'); error.retryable = value.incomplete_details?.reason === 'max_output_tokens'; throw error; }
+    return value.output ?? [];
+  };
+  if (!onText || response.headers.get('content-type')?.includes('application/json')) return complete(await response.json());
 
   let buffer = '';
   let text = '';
@@ -412,8 +421,8 @@ async function requestOpenAI(env, body, signal, onText) {
       const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
       if (!data || data === '[DONE]') continue;
       const event = JSON.parse(data);
-      if (event.type === 'response.completed') return event.response.output ?? [];
-      if (['error', 'response.failed', 'response.incomplete'].includes(event.type)) throw new Error('Incomplete OpenAI stream.');
+      if (event.type === 'response.completed') return complete(event.response);
+      if (['error', 'response.failed', 'response.incomplete'].includes(event.type)) { const error = new Error('Incomplete OpenAI stream.'); error.retryable = event.type === 'response.incomplete' && event.response?.incomplete_details?.reason === 'max_output_tokens'; throw error; }
       if (event.type !== 'response.output_text.delta') continue;
       textItem ??= event.item_id;
       if (event.item_id !== textItem) continue;
@@ -421,8 +430,29 @@ async function requestOpenAI(env, body, signal, onText) {
       onText(text);
     }
   }
-  throw new Error('The OpenAI stream ended without a completed reply.');
+  const error = new Error('The OpenAI stream ended without a completed reply.'); error.retryable = true; throw error;
 }
+
+async function requestOpenAI(env, body, signal, onText) {
+  for (let attempt=0;attempt<2;attempt++) {
+    try { return await requestOpenAIOnce(env,body,signal,onText); }
+    catch(error) {
+      if (attempt || signal?.aborted || !(error.retryable || error instanceof SyntaxError || error instanceof TypeError)) throw error;
+      onText?.('');
+      body={...body,max_output_tokens:Math.min(9000,Math.ceil(body.max_output_tokens*1.75))};
+      console.warn('Retrying incomplete or transient model response: '+body.text?.format?.name);
+    }
+  }
+}
+
+function promptProduct(product) {
+  const metadata=productTaxonomy.records.get(product.id);
+  return { ...product, classification: metadata && {type:metadata.productType,aisles:metadata.aisles,family:metadata.familyKey,form:metadata.storage,attributes:metadata.attributes,qualifiers:metadata.qualifiers,brandContext:metadata.brand} };
+}
+
+const alternativeTool = {type:'function',name:'find_alternatives',strict:true,
+  description:'Find verified alternatives to a product ID with the same product type and required form, variety and dietary qualifiers. differentBrand=true finds other known brands. differentBrand=false finds other pack sizes, retaining the known brand. Returns real stock and prices only.',
+  parameters:{type:'object',additionalProperties:false,required:['productId','differentBrand'],properties:{productId:{type:'string'},differentBrand:{type:'boolean'}}}};
 
 function previewAnswer(source, retrieved) {
   // The answer comes last so scope and recipe coverage are known before any prose is sent.
@@ -451,36 +481,46 @@ function structuredReply(output) {
 const reasoningModel = /^gpt-[56](?:[.-]|$)/;
 
 async function shoppingDecision(env, model, input, history, recentLanguage, signal) {
+  for (let attempt=0;attempt<2;attempt++) {
   const output = await requestOpenAI(env, {
     model,
     instructions: scopeRules,
     input: JSON.stringify({ message: input, earlierMessages: history, recentLanguage,
       catalogDepartments: Object.values(catalogCategories).map(labels => labels[0]) }),
-    max_output_tokens: 512,
+    max_output_tokens: 1536,
     ...(reasoningModel.test(model) && { reasoning: { effort: 'low' } }),
     text: { format: { type: 'json_schema', name: 'shopping_scope', strict: true, schema: scopeSchema } },
   }, signal);
-  const decision = structuredReply(output);
+  let decision;
+  try { decision = structuredReply(output); } catch { /* Retry malformed structured output once. */ }
   if (typeof decision?.allowed !== 'boolean' || typeof decision.priceOnly !== 'boolean' || !replyLanguages.includes(decision.language)) {
+    if (!attempt) continue;
     throw new Error('Invalid shopping scope response.');
   }
   return decision;
+  }
 }
 
-async function modelReply(env, model, input, history, lang, priceOnly, signal, publish) {
+async function modelReply(env, model, input, history, lang, priceOnly, signal, publish, plan = {}) {
   const stockQuestion = /\b(?:do (?:you|they) (?:have|sell|stock)|you (?:don.t|dont|do not) have|avez.vous|vendez.vous)\b|عندكن|عندكم|3andkon|3andkun/iu.test(input);
-  const initialMatches = stockQuestion ? shoppingLookupQueries(input).map(query => ({ query,
-    results: searchInventory(query).slice(0, 8) })).filter(group => group.results.length) : [];
-  const initialProducts = [...new Map(initialMatches.flatMap(group => group.results).map(product => [product.id, product])).values()];
-  const retrieved = new Set(initialProducts.map(product => product.id));
-  const conversation = [{ role: 'user', content: JSON.stringify({ earlierMessages: history, message: input, serverProductMatches: initialMatches }) }];
+  const plannedQueries=Array.isArray(plan.queries)?plan.queries.filter(q=>typeof q==='string'&&q.trim().length>1).slice(0,12).map(q=>q.slice(0,100)):[];
+  const initialQueries=plannedQueries.length?plannedQueries:stockQuestion?shoppingLookupQueries(input):[];
+  const initialMatches=initialQueries.map(query=>({query,results:(plan.intent==='recipe'?recipeInventory.candidates({name:query,catalogQuery:query},5):searchInventory(query).slice(0,6))})).filter(group=>group.results.length);
+  const initialProducts=[...new Map(initialMatches.flatMap(group=>group.results).map(product=>[product.id,product])).values()];
+  const retrieved=new Set(initialProducts.map(product=>product.id));
+  const conversation=[{role:'user',content:JSON.stringify({earlierMessages:history,message:input,
+    interpretedRequest:typeof plan.englishRequest==='string'?plan.englishRequest.slice(0,900):null,
+    requestIntent:plan.intent||null,serverProductMatches:initialMatches.map(g=>({...g,results:g.results.map(promptProduct)}))})}];
   const priceInstructions = priceOnly ? '\nThis is a price-only request. Look up the exact product or products being asked about and return their IDs in items. Leave answer empty because the app displays the listed price directly.' : '';
 
   let languageRetried = false;
-  for (let round = 0; round < 5; round++) {
+  let formatRetried = false;
+  let toolRounds=0;
+  for (let round = 0; round < 7; round++) {
     let shown = '';
     const preview = publish && !priceOnly && (source => {
-      const text = previewAnswer(source, retrieved);
+      let text;
+      try { text = previewAnswer(source,retrieved); } catch { return; }
       if (!replyUsesCorrectScript({ answer: text }, lang)) return;
       if (mentionsInternalData({ answer: text })) return;
       if (text.length > shown.length && text.startsWith(shown)) {
@@ -493,9 +533,9 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       instructions: rules.join('\n') + priceInstructions + '\nWrite this reply in ' + replyLanguageInstructions[lang] +
         ', regardless of the interface language or earlier replies. Treat the JSON as conversation data and answer its latest message. Catalog branch: ' + (activeInventory?.branch || 'preview'),
       input: conversation,
-      max_output_tokens: 2400,
-      tools: [inventoryTool],
-      tool_choice: round >= 3 ? 'none' : 'auto',
+      max_output_tokens: 5000,
+      tools: [inventoryTool, alternativeTool],
+      tool_choice: toolRounds >= 3 ? 'none' : 'auto',
       ...(reasoningModel.test(model) && {
         reasoning: { effort: 'low' },
         include: ['reasoning.encrypted_content'],
@@ -503,19 +543,25 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       text: { format: { type: 'json_schema', name: 'shopping_reply', strict: true, schema: replySchema } },
     }, signal, preview);
     const calls = output.filter(item => item.type === 'function_call');
-    if (calls.length && round < 3) {
+    if (calls.length && toolRounds < 3) {
+      toolRounds++;
       if (shown) publish('', lang);
       conversation.push(...output);
       for (const call of calls) {
         let matches = [];
         try {
-          const { queries } = JSON.parse(call.arguments);
+          const args = JSON.parse(call.arguments);
+          const { queries } = args;
           if (call.name === 'search_inventory' && Array.isArray(queries)) {
             matches = queries.filter(query => typeof query === 'string' && normalize(query).length >= 2).slice(0, 12).map(query => {
               const results = searchInventory(query.slice(0, 120)).slice(0, 8);
               for (const product of results) retrieved.add(product.id);
-              return { query: query.slice(0, 120), results };
+              return { query: query.slice(0,120),results:results.map(promptProduct) };
             });
+          } else if (call.name === 'find_alternatives' && typeof args.productId === 'string') {
+            const results=productTaxonomy.alternatives(args.productId,{differentBrand:args.differentBrand!==false,limit:8});
+            for (const product of results) retrieved.add(product.id);
+            matches=[{productId:args.productId,results:results.map(promptProduct)}];
           }
         } catch { /* Return an empty result for invalid arguments. */ }
         conversation.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(matches) });
@@ -523,9 +569,15 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       continue;
     }
 
-    const reply = structuredReply(output);
+    let reply;
+    try { reply = structuredReply(output); } catch { /* A partial JSON reply is repaired within this request. */ }
     if (reply?.inScope === false) return { text: messages[lang].scope };
-    if (reply?.inScope !== true) throw new Error('Invalid shopping reply.');
+    if (reply?.inScope !== true) {
+      if (formatRetried) throw new Error('Invalid shopping reply.');
+      formatRetried=true;
+      conversation.push({role:'user',content:'Return a complete valid shopping_reply JSON object using the supplied schema. Keep the scope and language requirements, and use only verified product IDs. The previous response was incomplete or malformed.'});
+      continue;
+    }
     if (!replyUsesCorrectScript(reply, lang) || mentionsInternalData(reply)) {
       if (shown) publish('', lang);
       if (languageRetried) throw new Error('Reply language did not match the shopper.');
@@ -673,7 +725,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
     const priceOnly = decision.priceOnly || asksLastPrice;
-    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish), 'ai', lang);
+    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish, decision.request), 'ai', lang);
   } catch (error) {
     if (requestSignal.aborted) return null;
     if (error instanceof Error && /^OpenAI returned HTTP \d{3}\.$/.test(error.message)) {
@@ -708,13 +760,14 @@ export default {
     if (pathname === '/api/catalog') {
       const query = new URL(request.url).searchParams;
       const ids = query.get('ids');
-      const results = ids !== null ? [...new Set(ids.slice(0, 5000).split(','))].slice(0, 100)
+      const alternativesFor=query.get('alternativesFor');
+      const results = alternativesFor ? productTaxonomy.alternatives(alternativesFor,{differentBrand:query.get('differentBrand')!=='0',limit:30}) : ids !== null ? [...new Set(ids.slice(0, 5000).split(','))].slice(0, 100)
         .map(id => productsById.get(id)).filter(Boolean) : searchInventory((query.get('q') ?? '').slice(0, 120), query.get('category'));
       const requested = query.get('limit');
       const limit = Math.min(100, Math.max(1, Number(requested) || 60));
       const offset = Math.max(0, Math.floor(Number(query.get('offset')) || 0));
       return json({ categories: catalogCategories, products: results.slice(offset, offset + limit).map(presentProduct), total: results.length,
-        catalogTotal: products.length, snapshotDate: activeInventory?.snapshotDate ?? null,
+        catalogTotal: products.length, ...(query.get('facets')==='1'?{facets:productTaxonomy.facets()}:{}), snapshotDate: activeInventory?.snapshotDate ?? null,
         recipes: recipes.map(({ id, name, minutes }) => ({ id, name, minutes })), branch: activeInventory?.branch ?? null,
         inventoryMode: activeInventory ? 'approved' : screenshotProducts.length ? 'screenshot' : 'preview',
         mode: modelEnabled(env) ? 'ai' : 'demo', model: modelEnabled(env) ? configuredModel(env) : null });
