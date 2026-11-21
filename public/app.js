@@ -1,6 +1,7 @@
 import { packQuantity, basketSummary, groupShoppingEntries, shoppingCopy } from './shopping.js';
 import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
 import { customerCopy } from './customer-copy.js';
+import { createProductPreviews } from './product-preview.js';
 
 const copy = {
   en: {
@@ -84,6 +85,7 @@ const listOnly = document.documentElement.dataset.view === 'list' || params.get(
 const parentOrigin = params.get('parent') || window.location.origin;
 if (widgetMode) document.body.classList.add('widget-mode');
 if (listOnly) document.body.classList.add('list-only');
+const productPreviews = createProductPreviews(() => lang);
 
 const list = new Map(Array.isArray(savedList) ? savedList.filter(item => item && typeof item.id === 'string' &&
   typeof item.amount === 'string').slice(0, 60).map(item => [item.id, item]) : []);
@@ -505,6 +507,7 @@ async function sendMessage(raw) {
 }
 
 function resetChat() {
+  productPreviews.close();
   setListOpen(false);
   activeRequest?.abort();
   activeRequest = null;
@@ -520,11 +523,15 @@ function resetChat() {
 }
 
 function productPhoto(product) {
-  const frame = element('span', 'product-photo');
+  const frame = element(product.imageUrl ? 'button' : 'span', 'product-photo');
   frame.append(icon('box'));
   if (product.imageUrl) {
+    frame.type = 'button'; frame.disabled = true;
     const image = element('img'); image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer';
-    image.addEventListener('error', () => image.remove(), { once: true }); image.src = product.imageUrl; frame.append(image);
+    image.addEventListener('load', () => { frame.disabled = false; }, { once: true });
+    image.addEventListener('error', () => { frame.disabled = true; image.remove(); }, { once: true });
+    productPreviews.attach(frame, product, image);
+    image.src = product.imageUrl; frame.append(image);
   }
   return frame;
 }
@@ -553,6 +560,7 @@ function updateList(action, message) {
   showToast(message, () => undoList(snapshot));
 }
 function setListOpen(open) {
+  productPreviews.close();
   const wasOpen = document.body.classList.contains('show-list');
   document.body.classList.toggle('show-list', open);
   byId('list-toggle').setAttribute('aria-expanded', String(open));
@@ -607,6 +615,7 @@ function renderList() {
 }
 
 function closeEmbedded(type) {
+  productPreviews.close();
   if (window.parent === window) return;
   window.parent.postMessage({ type }, parentOrigin);
   // Close same-origin embeds immediately; cross-origin embeds use the message above.

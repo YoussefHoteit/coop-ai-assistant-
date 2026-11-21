@@ -94,6 +94,12 @@ Leave unknown fields blank. Use in stock, out of stock, or unknown for availabil
 
 The import is validated before replacing the existing local snapshot. A multi-branch export requires choosing a branch. The approved snapshot replaces the preview inventory. It is ignored by Git. Live inventory and price updates require an approved feed and a refresh mechanism. Public listings help seed the demo. Screenshots can fill gaps in product labels.
 
+### Product image previews
+
+Product replies, recipe ingredients and both shopping-list views share an image viewer. Hover with a mouse or focus a thumbnail with the keyboard for a floating enlargement. Click or tap opens a modal image with a close button, backdrop dismissal and Escape support. Touch and hold for 350 ms shows a temporary preview; release or cancel dismisses it without opening a modal. Swiping before the hold threshold preserves normal scrolling. Broken thumbnails keep the original fallback and cannot open an empty viewer. Product names and accessible controls follow the current language.
+
+`node tests/product-preview.browser.mjs` exercises mouse, keyboard, real browser touch events, swipe cancellation, hold release, recipe cards, both lists and missing images across portrait, landscape, tablet and desktop layouts. Set `TEST_BASE_URL` for a different local port, and `PREVIEW_PATH` to test the generated standalone HTML as well.
+
 ### Mobile viewport and scrolling
 
 Fullscreen chat and the standalone shopping list lock the storefront at its current scroll position and restore it when closed. An opaque overlay covers the page while the frame follows the visual viewport's size and position, including toolbar changes, keyboard panning and rotation. Only the conversation, list and dialog content panes scroll; touch boundary handling prevents scrolling from escaping into the page. Conversation selection and input paste remain enabled.

@@ -14,6 +14,7 @@ const languageHelpers = (await publicText('language.js')).replace(/^export /gm, 
 const shoppingHelpers = (await publicText('shopping.js')).replace(/^export /gm, '');
 const markImage = 'data:image/svg+xml;base64,' + Buffer.from(await publicText('coop-mark.svg')).toString('base64');
 const customerHelpers = (await publicText('customer-copy.js')).replace(/^export /gm, '');
+const productPreviewHelpers = (await publicText('product-preview.js')).replace(/^export /gm, '');
 const workerSource = worker.slice(worker.indexOf('const DATA = ')).replace('export default {', 'return {');
 const inline = value => value.replace(/<\/script/gi, '<\\/script');
 const dataImage = 'data:image/jpeg;base64,' + image;
@@ -31,11 +32,12 @@ function inject(document, cssPath, css, code) {
     .replace('</body>', () => '<script type="module">\n' + inline(code) + '\n</script>\n</body>');
 }
 
-const chatApp = languageHelpers + '\n' + customerHelpers + '\n' + shoppingHelpers + '\n' + assistant
+const chatApp = languageHelpers + '\n' + customerHelpers + '\n' + shoppingHelpers + '\n' + productPreviewHelpers + '\n' + assistant
   .replace(/^import .* from '\.\/shopping\.js';\r?\n/m, '')
   .replaceAll("'/coop-mark.svg'", JSON.stringify(markImage))
   .replace(/^import .* from '\.\/language\.js';\r?\n/m, '')
   .replace(/^import .* from '\.\/customer-copy\.js';\r?\n/m, '')
+  .replace(/^import .* from '\.\/product-preview\.js';\r?\n/m, '')
   .replaceAll("fetch('/api/", "previewFetch('/api/")
   .replace("const savedLanguage = ", "const savedLanguage = window.name.endsWith('-ar') ? 'ar' : ")
   .replace("const widgetMode = params.get('widget') === '1';", 'const widgetMode = true;')

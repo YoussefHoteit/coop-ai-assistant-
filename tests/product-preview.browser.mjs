@@ -1,0 +1,147 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+const { chromium } = createRequire(process.env.TASK_MODULES ? path.join(process.env.TASK_MODULES, 'package.json') : import.meta.url)('playwright');
+const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:4173';
+const browser = await chromium.launch({ ...(process.env.BROWSER_EXE && { executablePath: process.env.BROWSER_EXE }), headless: true });
+// Product images are deterministic fixtures; inventory IDs, replies and shopping operations are real local flows.
+const picture = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="white"/><rect x="170" y="70" width="260" height="650" rx="30" fill="#faf4df" stroke="#184e3d" stroke-width="5"/><rect x="170" y="250" width="260" height="250" fill="#184e3d"/><text x="300" y="350" text-anchor="middle" fill="white" font-size="40">COOP</text><text x="300" y="420" text-anchor="middle" fill="white" font-size="32">Salt</text></svg>';
+const visible = (frame, selector) => frame.locator(selector).waitFor({ state: 'visible' });
+const hidden = (frame, selector) => frame.locator(selector).waitFor({ state: 'hidden' });
+await mkdir('tmp/image-qa', { recursive: true });
+try {
+  for (const [width, height] of [[390,844], [768,1024], [1440,900], [667,375]]) {
+    const touch = width < 1024;
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: width < 760, hasTouch: touch });
+    const page = await context.newPage(), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('https://**/*', route => route.request().resourceType() === 'image' ? route.fulfill({ contentType: 'image/svg+xml', body: picture }) : route.abort());
+    await page.goto(base);
+    await page.locator('al-makhazen-assistant-widget button').click();
+    const frame = page.frameLocator('al-makhazen-assistant-widget iframe');
+    await frame.locator('#question').fill('Do you have salt?');
+    await frame.locator('.send').click();
+    const photo = frame.locator('.product-row button.product-photo:enabled').first();
+    await photo.waitFor();
+    const name = await photo.getAttribute('aria-label');
+    assert.ok(name.startsWith('Enlarge product image: '));
+    assert.ok(!name.includes('[object Object]'));
+    const thumbURL = await photo.locator('img').getAttribute('src');
+    assert.equal(await photo.getAttribute('aria-haspopup'), 'dialog');
+    if (!touch) {
+      await photo.hover();
+      await visible(frame, '.product-peek');
+      assert.equal(await frame.locator('.product-peek img').getAttribute('src'), thumbURL);
+      const geometry = await frame.locator('.product-peek').evaluate(e => ({ rect: e.getBoundingClientRect().toJSON(), width: innerWidth, height: innerHeight }));
+      assert.ok(geometry.rect.x >= 0 && geometry.rect.y >= 0 && geometry.rect.right <= geometry.width && geometry.rect.bottom <= geometry.height);
+      assert.ok(geometry.rect.width > (await photo.boundingBox()).width * 3);
+      await frame.locator('#chat-title').hover();
+      await hidden(frame, '.product-peek');
+      await page.keyboard.press('Tab');
+      await photo.focus();
+      await visible(frame, '.product-peek');
+      await photo.press('Enter');
+    } else await photo.tap();
+    await visible(frame, '.product-image-dialog');
+    await page.setViewportSize({ width, height: height - 60 });
+    await visible(frame, '.product-image-dialog');
+    await page.setViewportSize({ width, height });
+    assert.equal(await frame.locator('.product-image-dialog img').getAttribute('src'), thumbURL);
+    assert.equal(await frame.locator('#product-image-title').innerText(), name.slice('Enlarge product image: '.length));
+    assert.ok((await frame.locator('.product-image-dialog img').boundingBox()).width > (await photo.boundingBox()).width * 3);
+    await page.screenshot({ path: `tmp/image-qa/tap-${width}.png` });
+    if (!touch) {
+      await page.keyboard.press('Escape');
+      await hidden(frame, '.product-image-dialog');
+      assert.equal(await photo.evaluate(e => e === document.activeElement), true);
+      assert.equal(await page.locator('al-makhazen-assistant-widget iframe').isVisible(), true, 'Escape closes the image, not the chat');
+    } else {
+      await frame.locator('.product-image-close').tap();
+      await hidden(frame, '.product-image-dialog');
+      const cdp = await context.newCDPSession(page);
+      const start = async () => {
+        await photo.scrollIntoViewIfNeeded();
+        const box = await photo.boundingBox(), point = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) };
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+        return point;
+      };
+      const point = await start();
+      await visible(frame, '.product-peek.is-holding');
+      assert.equal(await frame.locator('.product-image-dialog').isVisible(), false);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: point.x + 20, y: point.y + 12 }] });
+      await visible(frame, '.product-peek.is-holding');
+      await page.screenshot({ path: `tmp/image-qa/hold-${width}.png` });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await hidden(frame, '.product-peek');
+      await page.waitForTimeout(400);
+      assert.equal(await frame.locator('.product-image-dialog').isVisible(), false, 'Release must not create a sticky click preview');
+      await page.waitForTimeout(450);
+      // A swipe starting on a thumbnail is still a scrolling gesture, not a long press.
+      const swipe = await start();
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: swipe.x, y: Math.max(10, swipe.y - 50) }] });
+      await page.waitForTimeout(430);
+      assert.equal(await frame.locator('.product-peek').isVisible(), false);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      assert.equal(await frame.locator('.product-image-dialog').isVisible(), false);
+      await cdp.detach();
+    }
+    await frame.locator('.product-row .add-button').first().click();
+    await frame.locator('#list-toggle').click();
+    const listPhoto = frame.locator('#list-body button.product-photo:enabled').first();
+    await listPhoto.waitFor();
+    await listPhoto.click();
+    await visible(frame, '.product-image-dialog');
+    await frame.locator('.product-image-close').click();
+    await frame.locator('#list-toggle').click();
+    await frame.locator('#widget-close').click();
+    await page.locator('#store-basket').click();
+    const standalone = page.frameLocator('#store-list-frame');
+    await standalone.locator('button.product-photo:enabled').first().click();
+    await visible(standalone, '.product-image-dialog');
+    await page.keyboard.press('Escape');
+    await hidden(standalone, '.product-image-dialog');
+    assert.equal(await page.locator('#store-dialog').isVisible(), true, 'Image Escape must leave the standalone list open');
+    assert.equal(errors.length, 0, errors.join('\n'));
+    console.log('PASS product enlargement, pointer/keyboard/touch and both shopping lists', width, height);
+    await context.close();
+  }
+  const recipePage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await recipePage.route('https://**/*', route => route.request().resourceType() === 'image' ? route.fulfill({ contentType: 'image/svg+xml', body: picture }) : route.abort());
+  await recipePage.goto(base + '/assistant.html?widget=1');
+  await recipePage.locator('#question').fill('Give me tabbouleh for 4');
+  await recipePage.locator('.send').click();
+  await recipePage.locator('.result-card .primary').waitFor();
+  await recipePage.locator('.product-row button.product-photo:enabled').first().click();
+  await visible(recipePage, '.product-image-dialog');
+  await recipePage.locator('.product-image-close').click();
+  await recipePage.locator('#reset').click();
+  await recipePage.locator('#question').fill('Avez-vous du sel ?');
+  await recipePage.locator('.send').click();
+  await recipePage.locator('button.product-photo:enabled').first().waitFor();
+  assert.ok((await recipePage.locator('button.product-photo:enabled').first().getAttribute('aria-label')).startsWith('Agrandir'));
+  console.log('PASS recipe ingredient previews and language-aware labels');
+  await recipePage.close();
+  if (process.env.PREVIEW_PATH) {
+    const page = await browser.newPage();
+    await page.route('https://**/*', route => route.request().resourceType() === 'image' ? route.fulfill({ contentType: 'image/svg+xml', body: picture }) : route.abort());
+    await page.goto(pathToFileURL(path.resolve(process.env.PREVIEW_PATH)).href);
+    await page.locator('al-makhazen-assistant-widget button').click();
+    const frame = page.frameLocator('al-makhazen-assistant-widget iframe');
+    await frame.locator('#question').fill('Do you have salt?');await frame.locator('.send').click();
+    await frame.locator('button.product-photo:enabled').first().click();await visible(frame, '.product-image-dialog');
+    console.log('PASS self-contained HTML image viewer');await page.close();
+  }
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.route('https://**/*', route => route.abort());
+  await page.goto(base + '/assistant.html?widget=1');
+  await page.locator('#question').fill('Do you have salt?');
+  await page.locator('.send').click();
+  await page.locator('.product-row button.product-photo:disabled').first().waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('.product-row .product-photo')].every(e => !e.querySelector('img')));
+  assert.equal(await page.locator('.product-image-dialog').isVisible(), false);
+  assert.equal(await page.locator('.product-row button.product-photo:enabled').count(), 0);
+  console.log('PASS broken thumbnails retain a safe noninteractive fallback');
+  await page.close();
+} finally { await browser.close(); }

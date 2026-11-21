@@ -17,6 +17,7 @@ const staticFiles = {
   'app.js': 'text/javascript; charset=utf-8',
   'language.js': 'text/javascript; charset=utf-8',
   'customer-copy.js': 'text/javascript; charset=utf-8',
+  'product-preview.js': 'text/javascript; charset=utf-8',
   'widget.js': 'text/javascript; charset=utf-8',
   'groceries.jpg': 'image/jpeg',
 };
