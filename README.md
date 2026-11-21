@@ -1,6 +1,14 @@
-# Co-op AI Assistant
+# COOP AI Assistant
 
-A recreation of the Al Makhazen storefront for a private sales demonstration. Click **Ask Co-op** at the bottom right. The launcher, chat, recipe cards, and shopping list are responsive.
+A recreation of the Al Makhazen storefront for a private sales demonstration. Click **Ask COOP** at the bottom right. The launcher, chat, recipe cards, and shopping list are responsive.
+
+## Responsive shopping interface
+
+The custom COOP launcher opens a focused chat on phones and tablets. On larger screens, opening the shopping list expands the widget into a chat/list split view. Phone landscape and short viewports use the full screen. Language follows the conversation automatically; there is no manual language switch. New Chat clears conversation context while retaining the shopping list.
+
+The storefront basket and chat share the same saved list. Product photos use the original inventory export, with a neutral fallback if an image cannot load. List controls include purchase quantities, integer-cent estimated totals, checked items, recipe grouping, shared ingredients, copying, clearing, and Undo. Recipe requirements remain separate from purchase pack quantities. Measurable compatible units are rounded up to the package size; no volume/weight conversion is invented. Purchase quantities are editable, and unavailable items cannot be added. Totals exclude unavailable products and flag missing prices. This is a shopping list; no order is submitted.
+
+Run `npm run build` followed by `npm test` for the inventory, recipe, language and shopping arithmetic checks. With the local server running on port 4173 and Playwright available, run `node tests/ui.browser.mjs` and `node tests/languages.browser.mjs`. Set `BROWSER_EXE` to an installed Chromium browser if needed; `TASK_MODULES` optionally points to an existing node_modules directory. Browser checks cover 320×568, 390×844, 768×1024, 1024×768, 1440×900, and 667×375; list changes and persistence; four languages; partial reply rendering; history; and cancellation. Network images are blocked in the deterministic tests to exercise image fallbacks. Live provider behavior is mocked in automated model tests; the existing provider configuration is retained.
 
 ## Try the demo
 

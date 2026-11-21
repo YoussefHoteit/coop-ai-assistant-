@@ -4,70 +4,60 @@
   const lang = script.dataset.lang === 'ar' ? 'ar' : 'en';
   const tag = 'al-makhazen-assistant-widget';
   if (document.querySelector(tag)) return;
-
   const host = document.createElement(tag);
-  const shadow = host.attachShadow({ mode: 'open' });
+  const shadow = host.attachShadow({mode:'open'});
   const style = document.createElement('style');
-  style.textContent = [
-    ':host{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(19px,env(safe-area-inset-bottom));z-index:2147483000;font:700 15px system-ui,sans-serif;}',
-    'button{display:flex;align-items:center;gap:9px;margin-inline-start:auto;color:white;background:#a42b23;border:1px solid #ffffff35;border-radius:100px;padding:12px 15px;min-height:50px;cursor:pointer;box-shadow:0 7px 24px #69201956;font:inherit;}',
-    'button:hover{background:#87211c;}button:focus-visible{outline:3px solid #64845e;outline-offset:4px;}',
-    'button svg{height:22px;width:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}',
-    'iframe{position:absolute;bottom:62px;right:0;width:min(424px,calc(100vw - 36px));height:min(645px,calc(100dvh - 99px));border:1px solid #d5c8bd;border-radius:17px;background:#fcf9f4;box-shadow:0 15px 55px #3c211d42;}',
-    'iframe[hidden]{display:none;}',
-  ].join('');
-  const trigger = document.createElement('button');
-  trigger.type = 'button';
-  trigger.setAttribute('aria-expanded', 'false');
-  trigger.setAttribute('aria-controls', 'makhazen-chat-frame');
-  const icon = document.createElement('span');
-  icon.setAttribute('aria-hidden', 'true');
-  const bubble = '<svg viewBox="0 0 24 24"><path d="M21 11a8 8 0 0 1-8 8h-2l-6 2 1.6-4A8 8 0 1 1 21 11Z"/><path d="M9 11h6m-3-3v6"/></svg>';
-  const close = '<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>';
-  icon.innerHTML = bubble;
-  const label = document.createElement('span');
-  label.textContent = lang === 'ar' ? 'اسأل المخازن' : 'Ask Co-op';
-  trigger.append(icon, label);
-  const iframe = document.createElement('iframe');
-  iframe.id = 'makhazen-chat-frame';
-  iframe.title = lang === 'ar' ? 'مساعد التسوّق من المخازن' : 'Co-op shopping assistant';
-  iframe.allow = 'clipboard-write';
-  iframe.hidden = true;
-  let ready = false;
-  let pending = '';
-  function sendPending() {
-    if (!ready || !pending) return;
-    iframe.contentWindow.postMessage({ type: 'makhazen-prompt', prompt: pending }, origin);
-    pending = '';
+  style.textContent = `
+    :host{position:fixed;right:max(22px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));z-index:2147483000;font:600 14px system-ui,sans-serif}
+    button{display:flex;align-items:center;gap:11px;margin-inline-start:auto;padding:7px 20px 7px 7px;border:1px solid #ffffff90;border-radius:22px;background:#fffdf7;color:#59352a;box-shadow:0 8px 35px #532b2430;cursor:pointer;font:inherit;min-height:64px}
+    button:focus-visible{outline:3px solid #408561;outline-offset:4px}.mark{position:relative;display:flex}.mark img{width:48px;height:48px;border-radius:16px}.mark:after{content:'';position:absolute;width:9px;height:9px;border:3px solid #fffdf7;border-radius:50%;background:#4d9863;right:-3px;bottom:-2px}
+    .label{display:flex;flex-direction:column;gap:3px;text-align:left}.label strong{font-size:15px}.label small{font-size:10px;font-weight:400;color:#8d877a}
+    button:hover{transform:translateY(-2px)}button svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8}button .close{display:none}
+    :host([data-open]) button{padding:0;width:48px;min-height:48px;justify-content:center;border-radius:50%;background:#fff}
+    :host([data-open]) button .mark,:host([data-open]) button .label{display:none}:host([data-open]) button .close{display:block}
+    iframe{position:absolute;bottom:63px;right:0;width:min(470px,calc(100vw - 44px));height:min(760px,calc(100dvh - 110px));border:1px solid #e1e6df;border-radius:25px;background:#fff;box-shadow:0 24px 80px #223a3233}
+    :host([data-expanded]) iframe{width:min(900px,calc(100vw - 44px))}iframe[hidden]{display:none}
+    @media(max-width:600px), (max-height:500px) and (max-width:950px){:host{right:15px;bottom:max(15px,env(safe-area-inset-bottom))}iframe,:host([data-expanded]) iframe{position:fixed;inset:0;width:100vw;height:var(--viewport-height,100dvh);border:0;border-radius:0}:host([data-open]) button{display:none}}
+    @media(prefers-reduced-motion:reduce){button{transform:none!important}}
+  `;
+  const trigger=document.createElement('button'); trigger.type='button'; trigger.setAttribute('aria-expanded','false'); trigger.setAttribute('aria-controls','makhazen-chat-frame');
+  const mark=document.createElement('span'); mark.className='mark'; mark.setAttribute('aria-hidden','true');
+  const image=document.createElement('img'); image.src=origin+'/coop-mark.svg'; image.alt=''; mark.append(image);
+  const label=document.createElement('span'); label.className='label';
+  const title=document.createElement('strong'); title.textContent=lang==='ar'?'اسأل COOP':'Ask COOP';
+  const subtitle=document.createElement('small'); subtitle.textContent=lang==='ar'?'رفيقك بالتسوّق':'A little help. A better shop.'; label.append(title,subtitle);
+  const close=document.createElement('span'); close.className='close'; close.setAttribute('aria-hidden','true'); close.innerHTML='<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+  trigger.append(mark,label,close);
+  const iframe=document.createElement('iframe'); iframe.id='makhazen-chat-frame'; iframe.title='COOP shopping assistant'; iframe.allow='clipboard-write'; iframe.hidden=true;
+  let ready=false, pending='', pendingView='chat',previousFocus;
+  function sendPending(){
+    if(!ready)return;
+    iframe.contentWindow.postMessage({type:'makhazen-view',view:pendingView},origin);
+    if(pending)iframe.contentWindow.postMessage({type:'makhazen-prompt',prompt:pending},origin);
+    pending='';
   }
-  function setOpen(open) {
-    if (open && !iframe.hasAttribute('src')) {
+  function setOpen(open){
+    if(open){previousFocus=document.activeElement;host.setAttribute('data-open','');}
+    else host.removeAttribute('data-open');
+    if(open&&!iframe.hasAttribute('src')){
       iframe.src = origin + '/assistant.html?widget=1&lang=' + lang + '&parent=' + encodeURIComponent(location.origin);
     }
-    iframe.hidden = !open;
-    trigger.setAttribute('aria-expanded', String(open));
-    trigger.setAttribute('aria-label', open ? (lang === 'ar' ? 'سكّر المحادثة' : 'Close Co-op chat') : label.textContent);
-    icon.innerHTML = open ? close : bubble;
-    if (!open) trigger.focus();
+    iframe.hidden=!open;trigger.setAttribute('aria-expanded',String(open));trigger.setAttribute('aria-label',open?'Close COOP chat':title.textContent);
+    if(!open)(previousFocus?.focus?previousFocus:trigger).focus();
   }
-  trigger.addEventListener('click', () => setOpen(iframe.hidden));
-  trigger.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !iframe.hidden) setOpen(false);
+  trigger.addEventListener('click',()=>{pendingView='chat';setOpen(iframe.hidden);sendPending();});
+  trigger.addEventListener('keydown',event=>{if(event.key==='Escape'&&!iframe.hidden)setOpen(false);});
+  window.addEventListener('makhazen:open',event=>{
+    pending=typeof event.detail?.prompt==='string'?event.detail.prompt.slice(0,600):'';
+    pendingView=event.detail?.view==='list'?'list':'chat';setOpen(true);sendPending();
   });
-  window.addEventListener('makhazen:open', event => {
-    pending = typeof event.detail?.prompt === 'string' ? event.detail.prompt.slice(0, 600) : '';
-    setOpen(true);
-    sendPending();
+  window.addEventListener('message',event=>{
+    if(event.origin!==origin||event.source!==iframe.contentWindow)return;
+    if(event.data?.type==='makhazen-close-widget')setOpen(false);
+    if(event.data?.type==='makhazen-list-changed')window.dispatchEvent(new Event('makhazen:list'));
+    if(event.data?.type==='makhazen-list-visibility')host.toggleAttribute('data-expanded',Boolean(event.data.open));
+    if(event.data?.type==='makhazen-ready'){ready=true;sendPending();}
   });
-  window.addEventListener('message', event => {
-    if (event.origin !== origin || event.source !== iframe.contentWindow) return;
-    if (event.data?.type === 'makhazen-close-widget') setOpen(false);
-    if (event.data?.type === 'makhazen-list-changed') window.dispatchEvent(new Event('makhazen:list'));
-    if (event.data?.type === 'makhazen-ready') {
-      ready = true;
-      sendPending();
-    }
-  });
-  shadow.append(style, iframe, trigger);
-  document.body.append(host);
+  window.visualViewport?.addEventListener('resize',()=>host.style.setProperty('--viewport-height',window.visualViewport.height+'px'));
+  shadow.append(style,iframe,trigger);document.body.append(host);
 })();

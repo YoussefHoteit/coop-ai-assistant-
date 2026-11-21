@@ -370,6 +370,11 @@ const inventoryTool = {
   },
 };
 
+function presentProduct(product) {
+  const imageUrl = DATA.productImages?.[product.id];
+  return imageUrl ? { ...product, imageUrl } : product;
+}
+
 function plainReplyText(value) {
   return String(value ?? '')
     .replace(/\r\n?/g, '\n')
@@ -581,7 +586,7 @@ function configuredModel(env) {
 
 function presentReply(reply, mode, language) {
   const ids = new Set(reply.card?.items.map(item => item.id).filter(Boolean));
-  return { ...reply, mode, language, products: [...ids].map(id => productsById.get(id)).filter(Boolean) };
+  return { ...reply, mode, language, products: [...ids].map(id => productsById.get(id)).filter(Boolean).map(presentProduct) };
 }
 
 async function chat(request, env) {
@@ -708,7 +713,7 @@ export default {
       const requested = query.get('limit');
       const limit = Math.min(100, Math.max(1, Number(requested) || 60));
       const offset = Math.max(0, Math.floor(Number(query.get('offset')) || 0));
-      return json({ categories: catalogCategories, products: results.slice(offset, offset + limit), total: results.length,
+      return json({ categories: catalogCategories, products: results.slice(offset, offset + limit).map(presentProduct), total: results.length,
         catalogTotal: products.length, snapshotDate: activeInventory?.snapshotDate ?? null,
         recipes: recipes.map(({ id, name, minutes }) => ({ id, name, minutes })), branch: activeInventory?.branch ?? null,
         inventoryMode: activeInventory ? 'approved' : screenshotProducts.length ? 'screenshot' : 'preview',

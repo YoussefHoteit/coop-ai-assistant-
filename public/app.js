@@ -1,3 +1,4 @@
+import { packQuantity, basketSummary, groupShoppingEntries, shoppingCopy } from './shopping.js';
 import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
 import { customerCopy } from './customer-copy.js';
 
@@ -62,6 +63,8 @@ copy.arz = { ...copy.en, ...arabiziChatCopy };
 copy.fr = { ...copy.en, ...frenchChatCopy };
 for (const language of Object.keys(customerCopy)) Object.assign(copy[language], customerCopy[language]);
 
+for (const language of Object.keys(shoppingCopy)) Object.assign(copy[language], shoppingCopy[language]);
+
 const byId = id => document.getElementById(id);
 const storage = {
   read(key, fallback) {
@@ -75,7 +78,7 @@ const storage = {
 const params = new URLSearchParams(window.location.search);
 const savedLanguage = params.get('lang') || storage.read('makhazen-language', 'en');
 const savedList = storage.read('makhazen-list-v1', []);
-let lang = savedLanguage === 'ar' ? 'ar' : 'en';
+let lang = ['en','ar','arz','fr'].includes(savedLanguage) ? savedLanguage : 'en';
 const widgetMode = params.get('widget') === '1';
 const parentOrigin = params.get('parent') || window.location.origin;
 if (widgetMode) document.body.classList.add('widget-mode');
@@ -95,6 +98,7 @@ let activeRequest;
 let replyPreview;
 let toastTimeout;
 let dialogKind;
+let groupMode = 'all';
 
 const getText = (key, language = lang) => (copy[language] || copy.en)[key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
@@ -138,8 +142,6 @@ function setLanguage() {
     const key = node.dataset.text;
     node.textContent = getText(key === 'sample' && catalog?.inventoryMode === 'approved' ? 'approved' : key);
   });
-  byId('language').querySelector('span').textContent = lang === 'en' ? 'العربية' : 'English';
-  byId('language').setAttribute('aria-label', lang === 'en' ? 'Switch to Arabic' : 'Switch to English');
   byId('question').placeholder = getText('input');
   byId('reset').setAttribute('aria-label', getText('newChat'));
   byId('reset').title = getText('newChat');
@@ -148,7 +150,8 @@ function setLanguage() {
   byId('list-toggle').setAttribute('aria-label', getText('list'));
   document.querySelector('.send').setAttribute('aria-label', getText('send'));
   byId('mode-label').textContent = getText(catalog?.mode === 'ai' ? 'ai' : 'demo');
-  document.querySelector('.chat-note').textContent = inventoryNote();
+  document.querySelector('.chat-note').textContent = 'COOP · ' + getText('ready');
+  for (const [id, key] of [['tab-all','allItems'],['tab-recipe','byRecipe'],['clear-list','clear'],['total-label','estimated'],['continue-chat','done'],['list-title','list']]) byId(id).textContent = getText(key);
   renderPrompts();
   renderChat();
   renderList();
@@ -167,7 +170,12 @@ function loadCatalog() {
       for (const product of data.products) products.set(product.id, product);
       recipes = new Map(data.recipes.map(recipe => [recipe.id, recipe]));
       byId('mode-label').textContent = getText(data.mode === 'ai' ? 'ai' : 'demo');
-      document.querySelector('.chat-note').textContent = inventoryNote();
+      document.querySelector('.chat-note').textContent = 'COOP · ' + getText('ready');
+      for (const entry of list.values()) {
+        const product = products.get(entry.id);
+        if (product) for (const key of ['name','price','size','available','imageUrl','category']) entry[key] = product[key];
+      }
+      saveList();
       renderList();
       return data;
     }).finally(() => { catalogRequest = null; });
@@ -261,9 +269,9 @@ function renderCard(card, language) {
     if (nutrition) details.append(nutrition);
     const alreadyAdded = list.get(item.id)?.contributions?.[card.listKey] === (item.amount || '1 pack');
     const add = button('add-button', t(alreadyAdded ? 'onList' : 'add') + ' ' + name, alreadyAdded ? 'check' : 'plus',
-      () => addToList(card.listKey, [item], language), true);
+      () => addToList(card.listKey, [item], language, false, add), true);
     add.disabled = product.available === false;
-    row.append(details, add);
+    row.append(productPhoto(product), details, add);
     cardNode.append(row);
     if (product.available !== false) addable.push(item);
   }
@@ -279,7 +287,7 @@ function renderCard(card, language) {
   if (addable.length > 1 || (recipe && addable.length === 1)) {
     const footer = element('div', 'card-footer');
     footer.append(button('primary', t(recipe ? 'all' : 'allProducts'), 'plus',
-      () => addToList(card.listKey, addable, language, recipe)));
+      event => addToList(card.listKey, addable, language, recipe, event.currentTarget)));
     if (recipe) intro.after(footer);
     else cardNode.append(footer);
   }
@@ -292,7 +300,7 @@ function messageNode(message) {
   const row = element('article', 'message ' + (message.role === 'user' ? 'user' : 'assistant') + (message.typing ? ' typing' : ''));
   if (message.role !== 'user') {
     const avatar = element('span', 'avatar');
-    avatar.append(icon('spark'));
+    const mark = element('img'); mark.src = '/coop-mark.svg'; mark.alt = ''; avatar.append(mark);
     row.append(avatar);
   }
   const content = element('div', 'message-content');
@@ -329,8 +337,7 @@ function messageNode(message) {
 function renderChat(scroll = 'preserve') {
   const region = byId('messages');
   const oldPosition = region.scrollTop;
-  const initial = { role: 'assistant', content: getText('welcome') };
-  const nodes = [initial, ...chat].map(messageNode);
+  const nodes = chat.length ? chat.map(messageNode) : [welcomeNode()];
   if (activeRequest) {
     const language = chat.at(-1)?.language ?? lang;
     const pending = messageNode(replyPreview ?? { role: 'assistant', content: getText('typing', language), language, typing: true });
@@ -495,12 +502,15 @@ async function sendMessage(raw) {
       activeRequest = null;
       replyPreview = null;
       saveChat();
+      lang = chat.at(-1)?.language || lang;
+      setLanguage();
       renderChat('latest');
     }
   }
 }
 
 function resetChat() {
+  setListOpen(false);
   activeRequest?.abort();
   activeRequest = null;
   replyPreview = null;
@@ -514,47 +524,90 @@ function resetChat() {
   focusChat();
 }
 
+function productPhoto(product) {
+  const frame = element('span', 'product-photo');
+  frame.append(icon('box'));
+  if (product.imageUrl) {
+    const image = element('img'); image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer';
+    image.addEventListener('error', () => image.remove(), { once: true }); image.src = product.imageUrl; frame.append(image);
+  }
+  return frame;
+}
+
+function welcomeNode() {
+  const welcome = element('div', 'welcome');
+  const mark = element('img', 'welcome-mark'); mark.src = '/coop-mark.svg'; mark.alt = ''; mark.width = 64; mark.height = 64;
+  welcome.append(mark, element('span', 'eyebrow', 'ASK COOP'), element('h1', '', getText('welcomeTitle')), element('p', '', getText('welcomeIntro')));
+  const actions = element('div', 'welcome-actions');
+  for (const [key, glyph, index] of [['mealAction','chef',0],['findAction','search',1],['planAction','basket',2]]) {
+    actions.append(button('welcome-action', getText(key), glyph, () => {
+      if (index === 0) sendMessage(getText('prompts')[0][2]);
+      else { byId('question').value = index === 1 ? ({en:'Do you have ',ar:'هل لديكم ',fr:'Avez-vous ',arz:'3andkon '})[lang] : ({en:'Help me plan my shopping for ',ar:'ساعدني أخطط مشترياتي لـ ',fr:'Aidez-moi à préparer mes courses pour ',arz:'Se3edne ratteb el shopping la '})[lang]; focusChat(); }
+    }));
+  }
+  welcome.append(actions); return welcome;
+}
+
+function listSnapshot() { return structuredClone([...list.values()]); }
+function undoList(snapshot) {
+  list.clear(); for (const item of snapshot) list.set(item.id,item);
+  saveList(); renderList(); renderChat(); showToast(getText('undoDone'));
+}
+function updateList(action, message) {
+  const snapshot = listSnapshot(); action(); saveList(); renderList(); renderChat();
+  showToast(message, () => undoList(snapshot));
+}
+function setListOpen(open) {
+  const wasOpen = document.body.classList.contains('show-list');
+  document.body.classList.toggle('show-list', open);
+  byId('list-toggle').setAttribute('aria-expanded', String(open));
+  byId('shopping-list').inert = !open;
+  if (widgetMode) window.parent.postMessage({type:'makhazen-list-visibility',open}, parentOrigin);
+  if (open) byId('list-close').focus({preventScroll:true}); else if (wasOpen) byId('list-toggle').focus({preventScroll:true});
+}
 function renderList() {
   const body = byId('list-body');
-  const entries = [...list.values()].filter(({ id }) => products.has(id));
-  const count = entries.length;
-  byId('list-count').textContent = localizedNumber(count) + ' ' + getText(count === 1 ? 'item' : 'items');
-  byId('copy').disabled = count === 0;
-  if (!count) {
-    const empty = element('div', 'empty-list');
-    const graphic = element('span', 'empty-icon');
-    graphic.append(icon('basket'));
-    empty.append(graphic, element('strong', '', getText('empty')), element('p', '', getText('emptyInfo')));
-    body.replaceChildren(empty);
-    return;
+  const entries = [...list.values()];
+  const summary = basketSummary(entries, products);
+  byId('list-count').textContent = localizedNumber(entries.length) + ' ' + getText(entries.length === 1 ? 'item' : 'items');
+  byId('header-list-count').textContent = localizedNumber(entries.length);
+  byId('list-toggle').setAttribute('aria-label', getText('list') + ', ' + entries.length);
+  byId('list-total').textContent = price(summary.total);
+  byId('pack-count').textContent = localizedNumber(summary.quantity) + ' ' + getText('packs');
+  byId('price-note').textContent = [summary.unpriced ? getText('unknownPrices') : '',summary.unavailable ? getText('unavailableItems') : ''].filter(Boolean).join(' · ');
+  byId('copy').disabled = byId('clear-list').disabled = !entries.length;
+  if (!entries.length) {
+    const empty = element('div','empty-list'); const graphic = element('span','empty-icon'); graphic.append(icon('basket'));
+    empty.append(graphic,element('strong','',getText('empty')),element('p','',getText('emptyInfo'))); body.replaceChildren(empty); return;
   }
-
-  const items = element('ul', 'list-items');
-  for (const item of entries) {
-    const product = products.get(item.id);
-    const row = element('li', 'list-item');
-    const label = element('label');
-    const check = element('input');
-    check.type = 'checkbox';
-    check.checked = Boolean(item.checked);
-    check.addEventListener('change', () => {
-      item.checked = check.checked;
-      saveList();
-    });
-    const description = element('span');
-    const amount = item.contributions ? totalAmounts(Object.values(item.contributions), lang) : item.amount;
-    description.append(element('strong', '', product.name[lang]), element('small', '', amount || product.size[lang]));
-    label.append(check, description);
-    row.append(label, button('remove-button', getText('remove') + ' ' + product.name[lang], 'close', () => {
-      list.delete(item.id);
-      saveList();
-      renderList();
-      renderChat();
-      byId('shopping-list').focus({ preventScroll: true });
-    }, true));
-    items.append(row);
+  const sections = [];
+  for (const group of groupShoppingEntries(entries,groupMode)) {
+    const section = element('section','list-group');
+    const label = ({__all:'allGroup',__other:'other',__shared:'shared'})[group.label];
+    section.append(element('h3','group-title',label ? getText(label) : group.label));
+    for (const item of group.items) {
+      const product = products.get(item.id) || item;
+      const name = product.name?.[lang] || product.name?.en || item.id;
+      const row = element('article','list-item' + (item.checked ? ' checked' : ''));
+      const description = element('div','list-description');
+      const checkLabel = element('label','item-check'); const check = element('input'); check.type = 'checkbox'; check.checked = !!item.checked;
+      check.setAttribute('aria-label',getText('done') + ': ' + name);
+      check.addEventListener('change',()=>{item.checked=check.checked; saveList(); row.classList.toggle('checked',item.checked);});
+      checkLabel.append(check,element('strong','',name)); description.append(checkLabel);
+      const quantity = packQuantity(item, product);
+      description.append(element('small','',[(product.size?.[lang] || product.size?.en),Number.isFinite(product.price) ? price(product.price) : '',product.available === false ? getText('outOfStock') : ''].filter(Boolean).join(' · ')));
+      if (Object.values(item.groups||{}).some(g=>g.kind==='recipe')) description.append(element('small','recipe-needed',getText('needed') + ': ' + totalAmounts(Object.values(item.contributions||{}),lang)));
+      const controls = element('div','item-controls'); const stepper = element('div','quantity-stepper'); stepper.setAttribute('role','group'); stepper.setAttribute('aria-label',getText('quantity') + ': ' + name);
+      const change = delta => updateList(()=>{item.quantity = Math.max(1,Math.min(99,quantity+delta));},getText('updated'));
+      const less=button('icon-button',getText('quantity')+' − '+name,'minus',()=>change(-1),true); less.disabled=quantity<=1;
+      const more=button('icon-button',getText('quantity')+' + '+name,'plus',()=>change(1),true); more.disabled=quantity>=99;
+      stepper.append(less,element('span','',localizedNumber(quantity)),more);
+      controls.append(stepper,button('remove-button',getText('remove')+' '+name,'close',()=>updateList(()=>list.delete(item.id),getText('removed')),true));
+      row.append(productPhoto(product),description,controls); section.append(row);
+    }
+    sections.push(section);
   }
-  body.replaceChildren(items);
+  body.replaceChildren(...sections);
 }
 
 function saveList() {
@@ -618,7 +671,9 @@ function totalAmounts(values, language) {
   }).concat(unmatched).join(' + ');
 }
 
-function addToList(key, items, language, replaceRecipe = false) {
+function addToList(key, items, language, replaceRecipe = false, source) {
+  const snapshot = listSnapshot();
+  const card = chat.findLast(message => message.card?.listKey === key)?.card;
   const amounts = new Map();
   for (const item of items) {
     const product = products.get(item.id);
@@ -639,32 +694,50 @@ function addToList(key, items, language, replaceRecipe = false) {
     if (amount) contributions[key] = amount;
     else delete contributions[key];
     const values = Object.values(contributions);
-    if (values.length) list.set(id, { id, name: products.get(id)?.name ?? previous.name, contributions,
+    const groups = { ...(previous?.groups || {}) };
+    if (amount && card) groups[key] = { title: card.title || getText('allGroup'), kind: card.kind };
+    else if (!amount) delete groups[key];
+    const product = products.get(id) || previous;
+    if (values.length) list.set(id, { id, name: product.name, price: product.price, size: product.size, available: product.available, imageUrl: product.imageUrl, category: product.category, groups, contributions,
       amount: totalAmounts(values, 'en'), checked: false });
     else list.delete(id);
     changed = true;
   }
   if (changed) {
+    flyToList(source);
     saveList();
     renderList();
     renderChat();
   }
-  showToast(getText(changed ? 'added' : 'already', language));
+  showToast(getText(changed ? 'added' : 'already', language), changed ? () => undoList(snapshot) : null);
+  if (changed) { byId('list-toggle').classList.remove('bump'); void byId('list-toggle').offsetWidth; byId('list-toggle').classList.add('bump'); }
 }
 
-function showToast(text) {
-  const toast = byId('toast');
-  toast.textContent = text;
-  toast.hidden = false;
-  window.clearTimeout(toastTimeout);
-  toastTimeout = window.setTimeout(() => { toast.hidden = true; }, 2400);
+function flyToList(source) {
+  if (!source || matchMedia('(prefers-reduced-motion: reduce)').matches || !Element.prototype.animate) return;
+  const product = source.closest('.product-row')?.querySelector('.product-photo');
+  const from = (product || source).getBoundingClientRect();
+  const to = byId('list-toggle').getBoundingClientRect();
+  const flight = product ? product.cloneNode(true) : element('span','product-photo');
+  if (!product) flight.append(icon('basket'));
+  Object.assign(flight.style,{position:'fixed',left:from.x+'px',top:from.y+'px',zIndex:'100',pointerEvents:'none',width:from.width+'px',height:from.height+'px'});
+  document.body.append(flight);
+  flight.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${to.x-from.x}px,${to.y-from.y}px) scale(.3)`,opacity:0}],{duration:480,easing:'cubic-bezier(.3,.1,.2,1)'}).finished.finally(()=>flight.remove());
+}
+
+function showToast(text, undo) {
+  const toast = byId('toast'); toast.replaceChildren(element('span','',text));
+  if (undo) toast.append(button('toast-undo',getText('undo'),null,()=>{undo();}));
+  toast.hidden = false; window.clearTimeout(toastTimeout);
+  toastTimeout = window.setTimeout(()=>{toast.hidden=true;},undo ? 6500 : 3000);
 }
 
 async function copyList() {
-  const content = [...list.values()].filter(item => products.has(item.id)).map(({ id, amount, checked }) => {
-    const product = products.get(id);
-    return (checked ? '✓ ' : '• ') + product.name[lang] + ' — ' + (amount || product.size[lang]);
-  }).join('\n');
+  const summary = basketSummary([...list.values()],products);
+  const content = [...list.values()].map(item => {
+    const product=products.get(item.id)||item;
+    return (item.checked ? '✓ ' : '• ') + (product.name?.[lang]||product.name?.en||item.id) + ' × ' + packQuantity(item,product) + (Number.isFinite(product.price) ? ' — '+price(product.price*packQuantity(item,product)) : '');
+  }).join('\n') + '\n\n' + getText('estimated') + ': ' + price(summary.total);
   if (!content) return;
   try {
     await navigator.clipboard.writeText(content);
@@ -780,24 +853,24 @@ document.addEventListener('keydown', event => {
   if (byId('sidebar').classList.contains('open')) {
     toggleMenu(false);
     byId('menu').focus();
+  } else if (document.body.classList.contains('show-list') && !byId('dialog').open) {
+    setListOpen(false);
   } else if (widgetMode && !byId('dialog').open) {
     window.parent.postMessage({ type: 'makhazen-close-widget' }, '*');
   }
-});
-byId('language').addEventListener('click', () => {
-  lang = lang === 'en' ? 'ar' : 'en';
-  storage.write('makhazen-language', lang);
-  setLanguage();
 });
 byId('new-chat').addEventListener('click', resetChat);
 byId('reset').addEventListener('click', resetChat);
 byId('copy').addEventListener('click', copyList);
 byId('close-dialog').addEventListener('click', () => byId('dialog').close());
-byId('list-toggle').addEventListener('click', () => {
-  const shown = document.body.classList.toggle('show-list');
-  byId('list-toggle').setAttribute('aria-expanded', String(shown));
-  if (shown) byId('shopping-list').focus({ preventScroll: true });
+byId('list-toggle').addEventListener('click',()=>setListOpen(!document.body.classList.contains('show-list')));
+byId('list-close').addEventListener('click',()=>setListOpen(false));
+byId('continue-chat').addEventListener('click',()=>{setListOpen(false);focusChat();});
+byId('clear-list').addEventListener('click',()=>updateList(()=>list.clear(),getText('cleared')));
+for (const [id,mode] of [['tab-all','all'],['tab-recipe','recipe']]) byId(id).addEventListener('click',()=>{
+  groupMode=mode; byId('tab-all').setAttribute('aria-pressed',String(mode==='all')); byId('tab-recipe').setAttribute('aria-pressed',String(mode==='recipe')); renderList();
 });
+byId('shopping-list').inert = true;
 byId('widget-close').addEventListener('click', () => window.parent.postMessage({ type: 'makhazen-close-widget' }, parentOrigin));
 byId('composer').addEventListener('submit', event => {
   event.preventDefault();
@@ -807,6 +880,7 @@ setLanguage();
 loadCatalog().catch(() => { /* Chat and browse each retry the request when needed. */ });
 if (widgetMode && window.parent !== window) {
   window.addEventListener('message', event => {
+    if (event.source === window.parent && event.origin === parentOrigin && event.data?.type === 'makhazen-view') { setListOpen(event.data.view === 'list'); }
     if (event.source === window.parent && event.origin === parentOrigin &&
         event.data?.type === 'makhazen-prompt' && typeof event.data.prompt === 'string') sendMessage(event.data.prompt);
   });

@@ -1,3 +1,4 @@
+import { basketSummary } from './shopping.js';
 const byId = id => document.getElementById(id);
 const listKey = 'makhazen-list-v1';
 const categories = [
@@ -60,16 +61,17 @@ function list() {
   } catch { return []; }
 }
 
-function refreshBasket() { byId('basket-count').textContent = String(list().length); }
+function refreshBasket() {
+  const summary = basketSummary(list());
+  byId('basket-count').textContent = String(summary.count);
+  byId('basket-total').textContent = '$' + summary.total.toFixed(2);
+  byId('store-basket').setAttribute('aria-label', 'Open shopping list, ' + summary.count + ' items, estimated $' + summary.total.toFixed(2));
+}
 
 byId('category-grid').append(...categories.map(categoryTile));
 byId('close-store-dialog').addEventListener('click', () => byId('store-dialog').close());
 byId('store-basket').addEventListener('click', () => {
-  const entries = list();
-  const items = node('ul');
-  for (const item of entries) items.append(node('li', '', (item.name?.en || item.id) + (item.amount ? ' · ' + item.amount : '')));
-  byId('store-dialog-content').replaceChildren(entries.length ? items : node('p', '', 'Ask the shopping assistant for a product or recipe to start your list.'));
-  byId('store-dialog').showModal();
+  window.dispatchEvent(new CustomEvent('makhazen:open', { detail: { view: 'list' } }));
 });
 window.addEventListener('storage', event => { if (event.key === listKey) refreshBasket(); });
 window.addEventListener('makhazen:list', refreshBasket);

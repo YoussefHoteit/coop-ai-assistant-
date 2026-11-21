@@ -11,6 +11,8 @@ const staticFiles = {
   'store.js': 'text/javascript; charset=utf-8',
   'widget-preview.html': 'text/html; charset=utf-8',
   'app.css': 'text/css; charset=utf-8',
+  'shopping.js': 'text/javascript; charset=utf-8',
+  'coop-mark.svg': 'image/svg+xml',
   'app.js': 'text/javascript; charset=utf-8',
   'language.js': 'text/javascript; charset=utf-8',
   'customer-copy.js': 'text/javascript; charset=utf-8',
@@ -27,6 +29,9 @@ const data = JSON.parse(await readFile(join(project, 'src', 'catalog.json'), 'ut
 data.publicProducts = JSON.parse(await readFile(join(project, 'src', 'public-inventory.json'), 'utf8'));
 data.screenshotProducts = JSON.parse(await readFile(join(project, 'src', 'screenshot-inventory.json'), 'utf8'));
 data.catalogInventory = JSON.parse(gunzipSync(await readFile(join(project, 'src', 'inventory-catalog.json.gz'))).toString('utf8'));
+const productImages = JSON.parse(gunzipSync(await readFile(join(project, 'src', 'product-images.json.gz'))));
+data.productImages = Object.fromEntries(Object.entries(productImages).filter(([, image]) =>
+  typeof image === 'string' && image.startsWith('https://minimapi.weevi.com/')));
 if (data.catalogInventory.products.length !== data.catalogInventory.productCount ||
     new Set(data.catalogInventory.products.map(product => product.id)).size !== data.catalogInventory.productCount) {
   throw new Error('Catalog product count or identifiers are invalid');

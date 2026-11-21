@@ -23,7 +23,11 @@ test('every imported product can be retrieved with its original facts, including
   assert.equal(received.length, 7666);
   assert.equal(new Set(received.map(p => p.id)).size, 7666);
   const byId = new Map(received.map(p => [p.id, p]));
-  for (const original of inventory.products) assert.deepEqual(byId.get(original.id), original);
+  for (const original of inventory.products) {
+    const { imageUrl, ...facts } = byId.get(original.id);
+    assert.deepEqual(facts, original);
+    assert.ok(imageUrl?.startsWith('https://minimapi.weevi.com/'));
+  }
   assert.equal(received.filter(p => p.available === true).length, 5075);
   assert.equal(received.filter(p => p.available === false).length, 2591);
   assert.ok(received.every(p => p.sourceKind === 'catalog' && p.nutrition === null && p.allergens === ''));
@@ -80,6 +84,7 @@ test('AI recipe tool searches the full inventory and rejects fabricated product 
     }
     const results = JSON.parse(body.input.find(p => p.type === 'function_call_output').output);
     assert.equal(results.length, 6);
+    assert.ok(results.every(group => group.results.every(product => !Object.hasOwn(product, 'imageUrl'))), 'Presentation images must not inflate model input');
     chosen = results.map(({ query, results }) => {
       const product = results.find(p => p.available === true) || results[0];
       assert.ok(product, 'No catalog match for ' + query);

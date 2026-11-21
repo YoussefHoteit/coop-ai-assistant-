@@ -1,0 +1,63 @@
+import {createRequire} from 'node:module';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+const require=createRequire(process.env.TASK_MODULES ? path.join(process.env.TASK_MODULES,'package.json') : import.meta.url);
+const {chromium}=require('playwright');
+const browser=await chromium.launch({...(process.env.BROWSER_EXE && {executablePath:process.env.BROWSER_EXE}),headless:true});
+const out=path.resolve('tmp/ui-qa');await mkdir(out,{recursive:true});
+const results=[];
+try{
+ for(const [width,height] of [[320,568],[390,844],[768,1024],[1024,768],[1440,900],[667,375]]){
+  const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce'});
+  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  // Keep this run deterministic and exercise image fallbacks without depending on third-party servers.
+  await page.route('https://**/*',route=>route.abort());
+  await page.goto('http://127.0.0.1:4173/');
+  await page.locator('al-makhazen-assistant-widget button').click();
+  const frame=page.frameLocator('al-makhazen-assistant-widget iframe');
+  await frame.locator('.welcome').waitFor();
+  assert.equal(await frame.locator('#language').count(),0);
+  await page.screenshot({path:path.join(out,`welcome-${width}.png`)});
+  await frame.locator('#question').fill('Give me tabbouleh for 4');await frame.locator('.send').click();
+  await frame.locator('.result-card .primary').waitFor({timeout:15000});
+  await frame.locator('.result-card .primary').click();
+  await frame.locator('#toast .toast-undo').waitFor();
+  const entries=await page.evaluate(()=>JSON.parse(localStorage.getItem('makhazen-list-v1')));
+  assert.ok(entries.length>3,'Recipe added');
+  await frame.locator('.result-card .primary').click();
+  assert.equal((await page.evaluate(()=>JSON.parse(localStorage.getItem('makhazen-list-v1')))).length,entries.length,'Repeated add is idempotent');
+  const unavailable=frame.locator('.result-card .add-button:disabled');
+  if(await unavailable.count())assert.equal(await unavailable.first().isEnabled(),false,'Sold-out items cannot be added');
+  await frame.locator('#list-toggle').click();await frame.locator('#list-body .list-item').first().waitFor();
+  const before=await frame.locator('#list-total').innerText();assert.ok(!before.includes('0.00'),'Total available');
+  await frame.locator('.quantity-stepper button').nth(1).click();
+  const after=await frame.locator('#list-total').innerText();assert.notEqual(after,before);
+  await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('#list-total').innerText(),before);
+  await frame.locator('#tab-recipe').click();assert.ok((await frame.locator('.group-title').allTextContents()).some(t=>/tabbouleh/i.test(t)));
+  const count=await frame.locator('.list-item').count();
+  await frame.locator('.remove-button').first().click();assert.equal(await frame.locator('.list-item').count(),count-1);
+  await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('.list-item').count(),count);
+  await page.screenshot({path:path.join(out,`list-${width}.png`)});
+  const bounds=await frame.locator('body').evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,buttons:[...document.querySelectorAll('#list-close,#continue-chat,#copy')].map(e=>({id:e.id,rect:e.getBoundingClientRect().toJSON()})),height:innerHeight}));
+  assert.ok(bounds.scroll<=bounds.width+1,`No horizontal overflow: ${JSON.stringify(bounds)}`);
+  for(const e of bounds.buttons) assert.ok(e.rect.bottom<=bounds.height+1&&e.rect.x>=0,`Visible list control ${e.id}: ${JSON.stringify(bounds)}`);
+  await frame.locator('#copy').click();
+  if(await frame.locator('#dialog').evaluate(e=>e.open))await frame.locator('#close-dialog').click();
+  await frame.locator('#clear-list').click();assert.equal(await frame.locator('.list-item').count(),0);
+  await frame.locator('#toast .toast-undo').click();assert.equal(await frame.locator('.list-item').count(),count);
+  await frame.locator('#continue-chat').click();
+  await frame.locator('#reset').click();await frame.locator('.welcome').waitFor();
+  assert.equal((await page.evaluate(()=>JSON.parse(localStorage.getItem('makhazen-list-v1')))).length,count,'New chat retains list');
+  await frame.locator('#widget-close').click();
+  await page.locator('#store-basket').click();await frame.locator('#shopping-list').waitFor({state:'visible'});
+  assert.equal(await frame.locator('.list-item').count(),count,'Header opens same list');
+  assert.equal(await page.locator('#basket-count').innerText(),String(count));
+  await page.reload();await page.locator('#store-basket').click();await frame.locator('.list-item').first().waitFor();
+  assert.equal(await frame.locator('.list-item').count(),count,'List survives reload');
+  assert.equal(errors.length,0,errors.join('\n'));
+  results.push({width,height,items:count,total:before,passed:true});console.log('PASS',width,height);
+  await context.close();
+ }
+ await writeFile(path.join(out,'results.json'),JSON.stringify(results,null,2));
+}finally{await browser.close();}

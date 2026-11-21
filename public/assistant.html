@@ -2,10 +2,10 @@
 <html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Try the Al Makhazen shopping assistant. Find groceries and turn Lebanese recipes into a shopping list.">
   <meta name="theme-color" content="#f7f8f3">
-  <title>Al Makhazen · Ask Co-op</title>
+  <title>Al Makhazen · Ask COOP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet">
@@ -14,6 +14,7 @@
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="i-basket" viewBox="0 0 24 24"><path d="m4 11 1.7 8a2 2 0 0 0 2 1.5h8.6a2 2 0 0 0 2-1.5l1.7-8M3 11h18M8 11l4-7 4 7m-6 3v3m4-3v3"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11.5a7.8 7.8 0 0 1-8 7.5 9 9 0 0 1-3.4-.7L4 20l1.3-4A7.2 7.2 0 0 1 4 11.5 7.8 7.8 0 0 1 12 4a7.8 7.8 0 0 1 8 7.5Z"/><path d="M8.5 11.5h7"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></symbol>
@@ -56,7 +57,7 @@
     <div class="main">
       <header class="topbar">
         <div class="heading"><button class="icon-button menu-button" id="menu" aria-controls="sidebar" aria-expanded="false" aria-label="Menu"><svg><use href="#i-menu"/></svg></button><span class="heading-icon"><svg><use href="#i-spark"/></svg></span><span data-text="pageTitle">Shopping Assistant</span></div>
-        <div class="top-actions"><span class="mode"><i></i><span id="mode-label">Demo mode</span></span><button class="language" id="language" aria-label="Switch language"><svg><use href="#i-globe"/></svg><span>العربية</span></button></div>
+        <div class="top-actions"><span class="mode"><i></i><span id="mode-label">Demo mode</span></span></div>
       </header>
       <main class="content" id="content">
         <section class="hero" aria-labelledby="welcome-title">
@@ -69,10 +70,10 @@
         <div class="workspace">
           <section class="panel chat" id="chat" aria-labelledby="chat-title">
             <header class="panel-header chat-header">
-              <span class="panel-icon bot"><svg><use href="#i-spark"/></svg></span>
-              <div class="chat-heading"><h2 id="chat-title" data-text="chatTitle">Ask Co-op</h2><p data-text="chatSubtitle">Products, recipes and nutrition</p></div>
-              <button class="icon-button reset-button" id="reset" aria-label="New chat" title="New chat"><svg><use href="#i-reset"/></svg></button>
-              <button class="icon-button widget-control" id="list-toggle" aria-label="Shopping list" aria-controls="shopping-list" aria-expanded="false"><svg><use href="#i-list"/></svg></button>
+              <img class="assistant-mark" src="/coop-mark.svg" width="44" height="44" alt="">
+              <div class="chat-heading"><h2 id="chat-title" data-text="chatTitle">Ask COOP</h2><p data-text="chatSubtitle">Your shopping companion</p></div>
+              <button class="icon-button reset-button" id="reset" aria-label="New chat" title="New chat"><svg><use href="#i-plus"/></svg></button>
+              <button class="icon-button widget-control" id="list-toggle" aria-label="Shopping list" aria-controls="shopping-list" aria-expanded="false"><svg><use href="#i-basket"/></svg><span id="header-list-count" class="count-badge">0</span></button>
               <button class="icon-button widget-control" id="widget-close" aria-label="Close chat"><svg><use href="#i-close"/></svg></button>
             </header>
             <div class="messages" id="messages" role="log" aria-label="Chat messages" aria-live="polite"></div>
@@ -85,9 +86,10 @@
             <p class="chat-note" data-text="sample">Sample catalog. Prices and stock are for demonstration.</p>
           </section>
           <section class="panel list-panel" id="shopping-list" aria-labelledby="list-title" tabindex="-1">
-            <header class="panel-header"><span class="panel-icon"><svg><use href="#i-list"/></svg></span><div><h2 id="list-title" data-text="list">Shopping list</h2><p id="list-count" aria-live="polite">0 items</p></div></header>
+            <header class="panel-header list-header"><span class="panel-icon"><svg><use href="#i-basket"/></svg></span><div><h2 id="list-title">Your shopping list</h2><p id="list-count" aria-live="polite">0 items</p></div><button class="icon-button" id="list-close" aria-label="Close shopping list"><svg><use href="#i-close"/></svg></button></header>
+            <div class="list-toolbar"><div class="list-tabs" role="group" aria-label="Group shopping list"><button id="tab-all" aria-pressed="true">All items</button><button id="tab-recipe" aria-pressed="false">By recipe</button></div><button class="text-button" id="clear-list" disabled>Clear list</button></div>
             <div class="list-body" id="list-body"></div>
-            <footer class="list-footer"><button class="copy-button" id="copy" disabled><svg><use href="#i-copy"/></svg><span data-text="copy">Copy list</span></button></footer>
+            <footer class="list-footer"><div class="total-row"><div><span id="total-label">Estimated total</span><small id="pack-count">0 packs</small></div><strong id="list-total">$0.00</strong></div><p class="price-note" id="price-note"></p><button class="primary" id="continue-chat">Continue chatting<svg><use href="#i-arrow"/></svg></button><button class="copy-button" id="copy" disabled><svg><use href="#i-copy"/></svg><span data-text="copy">Copy list</span></button></footer>
           </section>
         </div>
       </main>

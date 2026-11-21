@@ -68,3 +68,5 @@ dialog::backdrop { background: #36231b6a; }
   .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .category-name { min-height: 38px; font-size: 12px; }
 }
+
+.basket-button{gap:10px;padding:9px 12px;border-radius:16px;box-shadow:0 4px 15px #61231c12;min-height:50px;color:#284b3b}.basket-label{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.basket-label b{font-size:12px}.basket-label small{font-size:10px;font-weight:500;color:#86917f}.basket-button #basket-count{min-width:23px;min-height:23px;font-size:11px;background:#284b3b}.basket-button svg{width:22px}@media(max-width:600px){.basket-label{display:none}.basket-button{gap:7px;padding:8px;min-height:44px;border-radius:13px}}@media(max-width:370px){.order-location{min-width:105px;padding-inline:12px}.order-location i{display:none}.store-brand strong{font-size:18px}.top-row{gap:6px;padding-inline:9px}}
