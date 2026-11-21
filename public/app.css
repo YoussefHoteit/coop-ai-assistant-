@@ -7,9 +7,10 @@
 @media(max-width:760px){.item-check strong{font-size:14px}.list-description small{font-size:11px}.quantity-stepper .icon-button,.remove-button{height:44px;min-width:40px}.item-check{min-height:24px}.chat-note{margin-bottom:max(12px,env(safe-area-inset-bottom))}}
 .list-only .shell{padding:0;max-width:none}.list-only .workspace{display:block;border:0;border-radius:0;box-shadow:none}.list-only .chat{display:none}.list-only .list-panel{display:flex;position:static;height:100%;border:0}.list-only .list-header{display:flex;visibility:visible}.list-only .toast{bottom:95px}@media(max-height:500px) and (max-width:760px){body:not(.list-only).show-list .chat-header{visibility:visible;min-height:58px;padding-block:7px}body:not(.list-only).show-list .list-panel{inset:58px 0 0}body:not(.list-only).show-list .list-header{display:none}}
 
-/* Keep display content and controls non-selectable; the message editor remains usable. */
+/* Protect interface chrome while allowing customers to copy conversation content. */
 body,body *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+.copyable-text,.copyable-text *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 img,svg{-webkit-user-drag:none;user-drag:none}
 .list-view-label{font-size:12px;font-weight:650;color:#50684f;padding:8px 0}
 html.list-only .shell{padding:0;max-width:none}html.list-only .workspace{display:block;border:0;border-radius:0;box-shadow:none}

@@ -230,7 +230,7 @@ function renderCard(card, language) {
   const cardNode = element('section', 'result-card');
   cardNode.lang = language === 'arz' ? 'ar-Latn-LB' : language;
   cardNode.dir = language === 'ar' ? 'rtl' : 'ltr';
-  const intro = element('div', 'card-intro');
+  const intro = element('div', 'card-intro copyable-text');
   intro.append(element('h3', '', recipe ? card.title : t('results')));
   if (recipe) intro.append(element('small', '', [card.minutes ? number(card.minutes) + ' ' + t('minutes') : '',
     number(card.servings) + ' ' + t('serves')].filter(Boolean).join(' · ')));
@@ -246,7 +246,7 @@ function renderCard(card, language) {
   for (const item of card.items) {
     const product = products.get(item.id);
     const row = element('div', 'product-row');
-    const details = element('div');
+    const details = element('div', 'copyable-text');
     if (!product) {
       if (!recipe || !item.name) continue;
       details.append(element('strong', '', item.name), element('small', '', [item.amount, t('noIngredient')].filter(Boolean).join(' · ')));
@@ -273,7 +273,7 @@ function renderCard(card, language) {
 
   if (recipe && card.steps?.length) {
     const details = element('details', 'steps');
-    const instructions = element('ol');
+    const instructions = element('ol', 'copyable-text');
     instructions.append(...card.steps.map(step => element('li', '', step)));
     details.append(element('summary', '', t('steps')), instructions);
     cardNode.append(details);
@@ -300,7 +300,7 @@ function messageNode(message) {
   }
   const content = element('div', 'message-content');
   if (message.content) {
-    const bubble = element('p', 'bubble', message.content);
+    const bubble = element('p', 'bubble copyable-text', message.content);
     bubble.dir = 'auto';
     bubble.lang = language === 'arz' ? 'ar-Latn-LB' : language;
     content.append(bubble);
@@ -584,7 +584,7 @@ function renderList() {
       const product = products.get(item.id) || item;
       const name = product.name?.[lang] || product.name?.en || item.id;
       const row = element('article','list-item' + (item.checked ? ' checked' : ''));
-      const description = element('div','list-description');
+      const description = element('div','list-description copyable-text');
       const checkLabel = element('label','item-check'); const check = element('input'); check.type = 'checkbox'; check.checked = !!item.checked;
       check.setAttribute('aria-label',getText('done') + ': ' + name);
       check.addEventListener('change',()=>{item.checked=check.checked; saveList(); row.classList.toggle('checked',item.checked);});
@@ -836,11 +836,28 @@ byId('shade').addEventListener('click', () => toggleMenu(false));
 function editableTarget(target) {
   return target instanceof Element && Boolean(target.closest('input,textarea,[contenteditable="true"]'));
 }
+function copyableRegion(target) {
+  const node = target instanceof Element ? target : target?.parentElement;
+  return node?.closest('.copyable-text');
+}
+function copyableSelection() {
+  const selection = window.getSelection();
+  return selection && !selection.isCollapsed && copyableRegion(selection.anchorNode) && copyableRegion(selection.focusNode);
+}
 for (const type of ['copy','cut','selectstart','dragstart','contextmenu','paste']) {
-  document.addEventListener(type,event=>{ if (!editableTarget(event.target)) event.preventDefault(); });
+  document.addEventListener(type,event=>{
+    if (editableTarget(event.target)) return;
+    if (type !== 'paste' && (copyableRegion(event.target) || (['copy','cut'].includes(type) && copyableSelection()))) return;
+    event.preventDefault();
+  });
 }
 document.addEventListener('keydown',event=>{
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editableTarget(event.target)) event.preventDefault();
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editableTarget(event.target)) {
+    event.preventDefault();
+    const selection=window.getSelection();
+    const region=copyableRegion(event.target)||copyableRegion(selection?.anchorNode);
+    if (region) { const range=document.createRange();range.selectNodeContents(region);selection.removeAllRanges();selection.addRange(range); }
+  }
 });
 
 document.addEventListener('keydown', event => {
