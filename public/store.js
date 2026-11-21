@@ -72,6 +72,7 @@ byId('category-grid').append(...categories.map(categoryTile));
 byId('close-store-dialog').addEventListener('click', () => byId('store-dialog').close());
 const listDialog = byId('store-dialog');
 const listFrame = byId('store-list-frame');
+listDialog.addEventListener('close',()=>window.dispatchEvent(new CustomEvent('makhazen:page-list',{detail:{open:false}})));
 function closePageList() { listDialog.close(); byId('store-basket').focus({preventScroll:true}); }
 window.addEventListener('makhazen:close-list', closePageList);
 window.addEventListener('message',event=>{
@@ -81,6 +82,7 @@ window.addEventListener('message',event=>{
 });
 listFrame.addEventListener('load',()=>listFrame.contentWindow.postMessage({type:'makhazen-sync-list'},location.origin));
 byId('store-basket').addEventListener('click', () => {
+  window.dispatchEvent(new CustomEvent('makhazen:page-list',{detail:{open:true}}));
   window.dispatchEvent(new Event('makhazen:close'));
   if (!listFrame.hasAttribute('src')) listFrame.src = '/shopping-list.html?parent=' + encodeURIComponent(location.origin);
   if (!listDialog.open) listDialog.showModal();

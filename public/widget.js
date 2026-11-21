@@ -18,7 +18,9 @@
     :host([data-open]) button .mark,:host([data-open]) button .label{display:none}:host([data-open]) button .close{display:block}
     iframe{position:absolute;bottom:63px;right:0;width:min(470px,calc(100vw - 44px));height:min(760px,calc(100dvh - 110px));border:1px solid #e1e6df;border-radius:25px;background:#fff;box-shadow:0 24px 80px #223a3233}
     :host([data-expanded]) iframe{width:min(900px,calc(100vw - 44px))}iframe[hidden]{display:none}
-    @media(max-width:600px), (max-height:500px) and (max-width:950px){:host{right:15px;bottom:max(15px,env(safe-area-inset-bottom))}iframe,:host([data-expanded]) iframe{position:fixed;inset:0;width:100vw;height:var(--viewport-height,100dvh);border:0;border-radius:0}:host([data-open]) button{display:none}}
+    :host([data-fullscreen][data-open]){position:fixed;inset:0;width:100%;height:100vh;height:100lvh;min-height:100dvh;background:#fff;overscroll-behavior:none}
+    :host([data-fullscreen]) iframe,:host([data-fullscreen][data-expanded]) iframe{position:absolute;inset:auto;top:var(--viewport-top,0px);left:var(--viewport-left,0px);right:auto;bottom:auto;width:var(--viewport-width,100vw);max-width:var(--viewport-width,100vw);height:var(--viewport-height,100dvh);max-height:var(--viewport-height,100dvh);min-height:0;border:0;border-radius:0;display:block}
+    :host([data-fullscreen]) iframe[hidden]{display:none}:host([data-fullscreen][data-open]) button{display:none}
     @media(prefers-reduced-motion:reduce){button{transform:none!important}}
   `;
   const trigger=document.createElement('button'); trigger.type='button'; trigger.setAttribute('aria-expanded','false'); trigger.setAttribute('aria-controls','makhazen-chat-frame');
@@ -30,6 +32,35 @@
   const close=document.createElement('span'); close.className='close'; close.setAttribute('aria-hidden','true'); close.innerHTML='<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>';
   trigger.append(mark,label,close);
   const iframe=document.createElement('iframe'); iframe.id='makhazen-chat-frame'; iframe.title='COOP shopping assistant'; iframe.allow='clipboard-write'; iframe.hidden=true;
+  const fullscreen=matchMedia('(max-width:600px), (max-height:500px) and (max-width:1100px)');
+  let pageListOpen=Boolean(document.getElementById('store-list-frame')&&document.getElementById('store-dialog')?.open), pageState=null, viewportFrame=0;
+  const root=document.documentElement;
+  function pageScrollLock(locked){
+    if(locked&&!pageState){
+      const properties=['position','top','left','right','width','overflow','overscroll-behavior','background-color','scroll-behavior'];
+      pageState={x:window.scrollX,y:window.scrollY,styles:[root,document.body].map(node=>({node,properties:properties.map(key=>[key,node.style.getPropertyValue(key),node.style.getPropertyPriority(key)])}))};
+      root.style.setProperty('overflow','hidden');root.style.setProperty('overscroll-behavior','none');root.style.setProperty('background-color','#fff');
+      Object.assign(document.body.style,{position:'fixed',top:-pageState.y+'px',left:-pageState.x+'px',right:'0',width:'100%',overflow:'hidden',overscrollBehavior:'none'});
+      root.classList.add('coop-overlay-open');
+    }else if(!locked&&pageState){
+      const saved=pageState;pageState=null;
+      for(const {node,properties}of saved.styles)for(const[key,value,priority]of properties){if(value)node.style.setProperty(key,value,priority);else node.style.removeProperty(key);}
+      root.classList.remove('coop-overlay-open');
+      const behavior=root.style.getPropertyValue('scroll-behavior'),priority=root.style.getPropertyPriority('scroll-behavior');
+      root.style.setProperty('scroll-behavior','auto','important');window.scrollTo(saved.x,saved.y);
+      if(behavior)root.style.setProperty('scroll-behavior',behavior,priority);else root.style.removeProperty('scroll-behavior');
+    }
+  }
+  function syncViewport(){
+    const full=fullscreen.matches;host.toggleAttribute('data-fullscreen',full);
+    pageScrollLock(full&&(!iframe.hidden||pageListOpen));
+    const viewport=window.visualViewport;
+    const geometry={height:viewport?.height||window.innerHeight,width:viewport?.width||root.clientWidth,top:Math.max(0,viewport?.offsetTop||0),left:Math.max(0,viewport?.offsetLeft||0)};
+    for(const [key,value]of Object.entries(geometry)){
+      host.style.setProperty('--viewport-'+key,value+'px');root.style.setProperty('--coop-viewport-'+key,value+'px');
+    }
+  }
+  function scheduleViewport(){if(!viewportFrame)viewportFrame=requestAnimationFrame(()=>{viewportFrame=0;syncViewport();});}
   let ready=false, pending='', pendingView='chat',previousFocus;
   function sendPending(){
     if(!ready)return;
@@ -38,16 +69,18 @@
     pending='';
   }
   function setOpen(open){
-    if(open){previousFocus=document.activeElement;host.setAttribute('data-open','');}
+    if(open){if(iframe.hidden)previousFocus=document.activeElement;host.setAttribute('data-open','');}
     else host.removeAttribute('data-open');
     if(open&&!iframe.hasAttribute('src')){
       iframe.src = origin + '/assistant.html?widget=1&lang=' + lang + '&parent=' + encodeURIComponent(location.origin);
     }
     iframe.hidden=!open;trigger.setAttribute('aria-expanded',String(open));trigger.setAttribute('aria-label',open?'Close COOP chat':title.textContent);
-    if(!open)(previousFocus?.focus?previousFocus:trigger).focus();
+    syncViewport();
+    if(!open)(previousFocus?.focus?previousFocus:trigger).focus({preventScroll:true});
   }
   trigger.addEventListener('click',()=>{pendingView='chat';setOpen(iframe.hidden);sendPending();});
   window.addEventListener('makhazen:close',()=>setOpen(false));
+  window.addEventListener('makhazen:page-list',event=>{pageListOpen=Boolean(event.detail?.open);syncViewport();});
   trigger.addEventListener('keydown',event=>{if(event.key==='Escape'&&!iframe.hidden)setOpen(false);});
   window.addEventListener('makhazen:open',event=>{
     pending=typeof event.detail?.prompt==='string'?event.detail.prompt.slice(0,600):'';
@@ -60,6 +93,11 @@
     if(event.data?.type==='makhazen-list-visibility')host.toggleAttribute('data-expanded',Boolean(event.data.open));
     if(event.data?.type==='makhazen-ready'){ready=true;sendPending();}
   });
-  window.visualViewport?.addEventListener('resize',()=>host.style.setProperty('--viewport-height',window.visualViewport.height+'px'));
+  window.visualViewport?.addEventListener('resize',scheduleViewport,{passive:true});
+  window.visualViewport?.addEventListener('scroll',scheduleViewport,{passive:true});
+  window.addEventListener('resize',scheduleViewport,{passive:true});
+  window.addEventListener('orientationchange',scheduleViewport,{passive:true});
+  fullscreen.addEventListener('change',scheduleViewport);
   shadow.append(style,iframe,trigger);document.body.append(host);
+  syncViewport();
 })();

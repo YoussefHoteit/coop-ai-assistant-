@@ -557,6 +557,7 @@ function setListOpen(open) {
   document.body.classList.toggle('show-list', open);
   byId('list-toggle').setAttribute('aria-expanded', String(open));
   byId('shopping-list').inert = !open;
+  syncAppViewport();
   if (widgetMode) window.parent.postMessage({type:'makhazen-list-visibility',open}, parentOrigin);
   if (open) byId('list-close').focus({preventScroll:true}); else if (wasOpen) byId('list-toggle').focus({preventScroll:true});
 }
@@ -885,6 +886,39 @@ byId('composer').addEventListener('submit', event => {
   event.preventDefault();
   sendMessage(byId('question').value);
 });
+let appViewportFrame=0;
+function syncAppViewport() {
+  const root=document.documentElement;
+  if(window.parent===window){
+    root.style.setProperty('--app-viewport-height',(window.visualViewport?.height||window.innerHeight)+'px');
+    root.style.setProperty('--app-viewport-top',Math.max(0,window.visualViewport?.offsetTop||0)+'px');
+  }
+  const header=document.querySelector('.chat-header');
+  if(header?.getBoundingClientRect().height)root.style.setProperty('--chat-header-height',header.getBoundingClientRect().height+'px');
+}
+function scheduleAppViewport(){if(!appViewportFrame)appViewportFrame=requestAnimationFrame(()=>{appViewportFrame=0;syncAppViewport();});}
+window.addEventListener('resize',scheduleAppViewport,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleAppViewport,{passive:true});
+window.visualViewport?.addEventListener('scroll',scheduleAppViewport,{passive:true});
+if(window.ResizeObserver)new ResizeObserver(scheduleAppViewport).observe(document.querySelector('.chat-header'));
+// Older touch browsers can chain a drag at a pane boundary into the iframe document.
+let lastTouch=null;
+document.addEventListener('touchstart',event=>{lastTouch=event.touches.length===1?{x:event.touches[0].clientX,y:event.touches[0].clientY}:null;},{passive:true});
+document.addEventListener('touchmove',event=>{
+  if(!lastTouch||event.touches.length!==1)return;
+  const touch=event.touches[0],dy=touch.clientY-lastTouch.y,dx=touch.clientX-lastTouch.x;
+  lastTouch={x:touch.clientX,y:touch.clientY};
+  if(Math.abs(dx)>=Math.abs(dy)||editableTarget(event.target)||copyableSelection())return;
+  let node=event.target instanceof Element?event.target:event.target?.parentElement;
+  while(node&&node!==document.body){
+    if(/auto|scroll/.test(getComputedStyle(node).overflowY)&&node.scrollHeight>node.clientHeight+1&&
+       (dy<0&&node.scrollTop+node.clientHeight<node.scrollHeight-1||dy>0&&node.scrollTop>0))return;
+    node=node.parentElement;
+  }
+  if(event.cancelable)event.preventDefault();
+},{passive:false});
+document.addEventListener('touchend',()=>{lastTouch=null;},{passive:true});
+syncAppViewport();
 setLanguage();
 if (listOnly) { document.title = 'COOP · Shopping list'; setListOpen(true); }
 loadCatalog().catch(() => { /* Chat and browse each retry the request when needed. */ });

@@ -94,4 +94,10 @@ Leave unknown fields blank. Use in stock, out of stock, or unknown for availabil
 
 The import is validated before replacing the existing local snapshot. A multi-branch export requires choosing a branch. The approved snapshot replaces the preview inventory. It is ignored by Git. Live inventory and price updates require an approved feed and a refresh mechanism. Public listings help seed the demo. Screenshots can fill gaps in product labels.
 
-For a self-contained preview, run npm run build and then npm run preview:html. The HTML embeds the current catalog. Use the preview catalog when sharing an example outside Co-op.
+### Mobile viewport and scrolling
+
+Fullscreen chat and the standalone shopping list lock the storefront at its current scroll position and restore it when closed. An opaque overlay covers the page while the frame follows the visual viewport's size and position, including toolbar changes, keyboard panning and rotation. Only the conversation, list and dialog content panes scroll; touch boundary handling prevents scrolling from escaping into the page. Conversation selection and input paste remain enabled.
+
+`node tests/viewport.browser.mjs` checks simulated visual-viewport changes, keyboard geometry, touch boundaries, scroll restoration and desktop/mobile transitions. The responsive UI, copy and presentation browser suites also cover these layouts. These are automated Chromium checks; physical iOS Safari testing remains a separate device check.
+
+For a self-contained preview, run npm run build and then npm run preview:html. The HTML embeds the current catalog. Use the preview catalog when sharing an example outside COOP.
