@@ -56,6 +56,7 @@ export async function repairCustomerProse(reply, language, request, validate, op
     const numbers=text=>[...String(text).normalize('NFKC').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
       .matchAll(/(?:^|[^\p{L}\p{N}])(\d+(?:[.,]\d+)?)(?=$|[^\p{L}\p{N}]|(?:kg|gr|g|ml|cl|l|oz|lb)\b)/giu)].map(match=>match[1].replace(',','.')).join('|');
     if (reply.items.some((item,i)=>numbers(item.amount)&&numbers(item.amount)!==numbers(candidate.items[i].amount))) {failure='repair_quantities';continue;}
+    if (reply.recipe?.steps?.some((step,i)=>numbers(step)&&numbers(step)!==numbers(candidate.recipe.steps[i]))) {failure='repair_quantities';continue;}
     if (validate(candidate)) return candidate;
     failure='reply_language';
     fields=[...texts].filter(([key,text])=>!validSlot(key,text)).map(([key,text])=>key+':'+

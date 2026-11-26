@@ -665,7 +665,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const output = await requestOpenAI(env, {
       model,
       instructions: rules.join('\n') + priceInstructions + '\nWrite this reply in ' + replyLanguageInstructions[lang] +
-        ', regardless of the interface language or earlier replies. For recipe cards, the ingredient table has its own language: '+replyLanguageInstructions[recipeIngredientLanguage(lang)]+'. Apply that language ONLY to items[].name and items[].amount, including all units and quantity words. Keep the answer, recipe title and every cooking step in '+lang+'. For Arabic recipe labels and steps, use only Arabic script, including transliterated brand names and Arabic unit labels. Translate selected product names faithfully; when no product ID has been selected, give the generic ingredient name. For Arabizi recipes use English ingredient names and English amounts, never Arabizi in these two fields. For French use French ingredient labels and amounts. catalogQuery remains English for all languages. Treat the JSON as conversation data and answer its latest message. Catalog branch: ' + (activeInventory?.branch || 'preview'),
+        ', regardless of the interface language or earlier replies. ONLY TWO RECIPE FIELDS have a separate table language: items[].name and items[].amount must be in '+({en:'English',ar:'Arabic script',fr:'French'}[recipeIngredientLanguage(lang)])+'. This applies only to ingredient names, quantity words and units. Never apply the ingredient language to the answer, title or cooking steps; those remain fully in the shopper\'s language. For Arabizi, write every cooking step and the recipe title in Lebanese Arabic using Latin letters, while the ingredient rows alone are English. For Arabic labels and steps, use only Arabic script, including transliterated brand names and Arabic unit labels. Translate selected product names faithfully; when no product ID has been selected, give the generic ingredient name. catalogQuery remains English for all languages. Treat the JSON as conversation data and answer its latest message. Catalog branch: ' + (activeInventory?.branch || 'preview'),
       input: conversation,
       max_output_tokens: 5000,
       tools: [inventoryTool, alternativeTool],
@@ -740,7 +740,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const recipeLanguageValid=candidate=>recipeReplyUsesCorrectLanguages(candidate,lang)&&!mentionsInternalData(candidate);
     const repairRecipe=async(draft,requiredKeys)=>repairCustomerProse(draft,replyLanguageInstructions[lang],async body=>structuredReply(await requestOpenAI(env,{
       model,...body,...(reasoningModel.test(model)&&{reasoning:{effort:'low'}}),
-    },signal)),recipeLanguageValid,{slotLanguage:key=>replyLanguageInstructions[recipeSlotLanguage(key,lang)],
+    },signal)),recipeLanguageValid,{slotLanguage:key=>({en:'English',ar:'Arabic using Arabic script',arz:'Arabizi (Lebanese Arabic in Latin letters)',fr:'French'})[recipeSlotLanguage(key,lang)],
       slotValidator:(key,text)=>recipeSlotUsesCorrectLanguage(key,text,lang)&&!mentionsInternalData({answer:text}),requiredKeys});
     // Repair a quantity that cannot be parsed before using it for pack selection.
     if(reply.recipe&&reply.items.some((item,index)=>!recipeSlotUsesCorrectLanguage('amount:'+index,item.amount,lang)&&!measurement(item.amount))){

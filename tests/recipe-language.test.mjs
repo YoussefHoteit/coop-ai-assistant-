@@ -17,6 +17,7 @@ test('mixed Arabic requests retain Arabic and recipe row language differs only f
   assert.equal(recipeReplyUsesCorrectLanguages({answer:'هاي الوصفة',recipe:{title:'أرز',steps:['اغسل الأرز']},items:[{name:'White rice',amount:'٢٠٠ غ'}]},'ar'),false);
   assert.equal(recipeReplyUsesCorrectLanguages({answer:'Hayde el wasfe.',recipe:{title:'Rezz',steps:['Ghassel el rezz.']},items:[{name:'Rice',amount:'200 g'}]},'arz'),true);
   assert.equal(recipeReplyUsesCorrectLanguages({answer:'Hayde el wasfe.',recipe:{title:'Rezz',steps:['Ghassel el rezz.']},items:[{name:'Rezz',amount:'2 ma3ale2'}]},'arz'),false);
+  assert.equal(recipeReplyUsesCorrectLanguages({answer:'Hayde el wasfe.',recipe:{title:'Lebanese Mulukhiyah with Chicken',steps:['Place the whole chicken in a pot, cover with water, and bring to a boil.']},items:[{name:'Whole chicken',amount:'1 kg'}]},'arz'),false);
 });
 
 test('unclear Arabic wording gets a specific clarification and its answer can use the earlier context',async()=>{
@@ -76,5 +77,26 @@ test('Arabizi recipe instructions keep Arabizi while incorrect ingredient quanti
     const reply=await request('baddi a3mel wasfe bel zebde');
     assert.equal(reply.mode,'ai');assert.equal(repairs,1);assert.equal(reply.card.steps[0],'Dawwib el zebde 3a nar hadye.');
     assert.equal(reply.card.items[0].name,reply.products[0].name.en);assert.equal(reply.card.items[0].amount,'2 tablespoons');
+  }finally{globalThis.fetch=saved;}
+});
+
+test('an English preparation step and title cannot pass as Arabizi when the ingredient table is English',async()=>{
+  const saved=globalThis.fetch;let repairs=0;
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(options.body);
+    if(body.text.format.name==='shopping_scope')return output(plan('arz'));
+    if(body.text.format.name==='shopping_prose'){
+      repairs++;const slots=JSON.parse(body.input[0].content).requiredTexts;
+      assert.deepEqual(slots.map(slot=>slot.key),['title','step:0']);
+      assert.ok(slots.every(slot=>slot.requiredLanguage.startsWith('Arabizi')));
+      return output({texts:slots.map(slot=>({key:slot.key,text:slot.key==='title'?'Wasfe bel zebde':'Dawwib el zebde 3a nar hadye la 2 d2i2a.'}))});
+    }
+    return output({inScope:true,answer:'Hayde el wasfe.',recipe:{title:'Recipe with Butter',servings:4,minutes:20,steps:['Heat the butter in a pan for 2 minutes.'],revisesRecipe:null},items:[{id:'178830',name:'Unsalted butter',amount:'30 g',grams:30,catalogQuery:'unsalted butter'}],showNutrition:false});
+  };
+  try{
+    const reply=await request('baddi a3mel wasfe bel zebde');
+    assert.equal(reply.mode,'ai');assert.equal(repairs,1);assert.equal(reply.card.title,'Wasfe bel zebde');
+    assert.equal(reply.card.steps[0],'Dawwib el zebde 3a nar hadye la 2 d2i2a.');
+    assert.equal(reply.card.items[0].name,reply.products[0].name.en);assert.equal(reply.card.items[0].amount,'30 g');
   }finally{globalThis.fetch=saved;}
 });

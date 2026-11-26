@@ -81,7 +81,23 @@ export function recipeSlotUsesCorrectLanguage(key, text, language) {
   const expected = recipeSlotLanguage(key,language);
   if (expected === 'ar') return [...text].every(char=>!/\p{L}/u.test(char)||arabicScript.test(char));
   if (!replyUsesCorrectScript({answer:text},expected)) return false;
-  if (expected === 'en' && /^(?:name|amount):/.test(key)) {
+  const ingredient=/^(?:name|amount):/.test(key);
+  if(!ingredient){
+    // Judge complete sentences independently. A correct opening sentence must not
+    // hide an English cooking step inside an otherwise Arabizi or French recipe.
+    const english=(text.match(/\b(?:the|and|with|then|until|into|from|in|over|for|of|place|rinse|wash|drain|add|stir|simmer|bring|remove|cover|heat|cook|mix|serve|slice|chop|peel|bake|pour|season|combine|reserve|boil|reduce|stirring|occasionally|minutes|tender|gently|lebanese)\b/gi)||[]).length;
+    if(expected==='arz'){
+      const levantine=(text.match(/\b(?:el|il|w|ma3|bel|bil|lal|la|men|min|ta7t|fo2|awal|ba3den|ba3d|7atta|3a|3al|bala|shway|shwayyet|mni7|halla2|hayde|hayda|ghassel|eslo2|sakhin|khallet|zid|7ot|7otti|2atta3|dawwib|etbokh|ghall[iy]|2addem|2addim)\b/gi)||[]).length;
+      if(english>=2&&english>levantine)return false;
+      if(key==='title'&&/\b(?:lebanese|with|without|and|soup|chicken|potato|vegetable|lentil|recipe)\b/i.test(text)&&!levantine&&!isArabizi(text))return false;
+    }
+    if(expected==='fr'){
+      const french=(text.match(/\b(?:le|la|les|de|du|des|dans|avec|et|puis|au|aux|sur|pour|faites|ajoutez|m[ée]langez|coupez|rincez|servez|laissez|versez|chauffez)\b/gi)||[]).length;
+      if(english>=2&&english>french)return false;
+    }
+    if(expected==='en'&&key!=='title'&&isArabizi(text)&&!english)return false;
+  }
+  if (expected === 'en' && ingredient) {
     const folded=text.toLowerCase().trim();
     // Familiar food names such as hummus and labneh are legitimate English labels.
     if (isArabizi(text) || /\b(?:ba2dounes|banadoura|na3na3|toum|khyar|basal|mele7|mal3a2a|ma3ale2|damme|7abbe|3elbe|fass|3a zaw2ak|7asab el zaw2)\b/i.test(folded)) return false;
