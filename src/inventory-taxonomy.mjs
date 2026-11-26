@@ -1,5 +1,7 @@
 // Search metadata only. Original names, IDs, prices, stock and label facts remain authoritative.
 export function createProductTaxonomy(products, categoryLabels = {}, normalize) {
+  const originalNormalize=normalize;
+  normalize=value=>originalNormalize(value).replace(/(?<!\d)\.|\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
   const foodDepartments = new Set(['pantry','produce','frozen','dairy','meat','fish','bakery','organic','ready','snacks','beverages','coffee-tea']);
   const defs = [];
   const define = (type, aliases, departments, exclude = '') => defs.push({type,aliases:aliases.split('|').map(normalize).filter(Boolean),departments:departments.split(','),exclude:exclude && new RegExp(exclude)});
@@ -48,7 +50,9 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   define('milk powder','milk powder|powder milk|lait poudre|حليب بودرة','dairy,baby');
   define('butter','butter|beurre|زبدة','dairy','peanut|cocoa|cookie|biscuit|buttermilk');
   define('cream','cream|creme|كريمة','dairy','cheese|dessert|yogurt|milk|caramel|vanill');
-  define('cheese','cheese|fromage|mozzarella|parmesan|parmigiano|reggiano|feta|fetta|halloumi|kashkaval|cheddar|جبنة|جبن','dairy');
+  // Shared type and variety aliases, including the supplier's spelling.
+  const cheeseVarieties={mozzarella:'mozzarella|mozarella|mozarela|mozzarela',parmesan:'parmesan|parmigiano|reggiano',feta:'feta|fetta',halloumi:'halloumi|halloum|haloum',akkawi:'akkawi|akawi',cheddar:'cheddar',kashkaval:'kashkaval|kashkawan',edam:'edam',gouda:'gouda',emmental:'emmental|emmenthal',brie:'brie',camembert:'camembert',ricotta:'ricotta',mascarpone:'mascarpone',roquefort:'roquefort',shanklish:'shanklish|shankleesh',nabulsi:'nabulsi|nabulsieh',bulgarian:'bulgarian|bulgarie',creamcheese:'cream cheese|double cream',processedcheese:'processed cheese|cheese triangles|cheese triangle'};
+  define('cheese','cheese|cheeses|fromage|fromages|'+Object.values(cheeseVarieties).join('|')+'|جبنة|جبن','dairy');
   define('yogurt','yogurt|yoghurt|yaourt|لبن','dairy');define('labneh','labneh|labne|لبنة','dairy');define('eggs','eggs|egg|oeuf|بيض','dairy');
   define('chicken','chicken|poulet|دجاج|فروج','meat,frozen','sausage|mortadella|burger|nugget|ring|liver|soup|pizza');
   define('beef','beef|boeuf|لحم بقر','meat,frozen','sausage|mortadella|burger|soup');
@@ -77,7 +81,10 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   const attributes=[['red',/\bred\b|\bahmar\b|احمر/],['brown',/\bbrown\b|\basmar\b|اسمر/],['green',/\bgreen\b|اخضر/],['white',/\bwhite\b|\babyad\b|ابيض/],
     ['split',/\bsplit\b|majrou|مجروش/],['whole',/\bwhole\b|\barid\b|عريض/],['ground',/\bground\b|moulu|powder|مطحون/],['leaves',/\bleaves?\b|اوراق/],
     ['basmati',/\bbasmati\b/],['long-grain',/long grain/],['short-grain',/short grain/],['coarse',/coarse|khechen|خشن/],['fine',/\bfine\b|naem|ناعم/],
-    ...['fettuccine','spaghetti','penne','fusilli','macaroni','tagliatelle','lasagna','linguine','farfalle','parmesan','mozzarella','cheddar','feta','halloumi','kashkaval'].map(t=>[t,new RegExp(t==='fettuccine'?'fett?ucc?in[ei]':t==='lasagna'?'lasagn[ae]':t==='feta'?'fett?a':t==='parmesan'?'parmesan|parmigiano|reggiano':t)])];
+    ...['fettuccine','spaghetti','penne','fusilli','macaroni','tagliatelle','lasagna','linguine','farfalle'].map(t=>[t,new RegExp(t==='fettuccine'?'fett?ucc?in[ei]':t==='lasagna'?'lasagn[ae]':t)]),
+    ...Object.entries(cheeseVarieties).map(([tag,terms])=>[tag,new RegExp('(?:^| )('+terms+')(?: |$)')])];
+  const forms=[['shredded',/\b(?:shredded|shred|rapp?e|grated)\b/],['sliced',/\b(?:slices?|sliced|tranches?)\b/],['block',/\b(?:blocks?|bloc)\b/]];
+  attributes.push(...forms);
   attributes.push(['yellow',/\byellow\b|\bjaune\b|\bsafra\b|\basfar\b|اصفر|صفراء/]);
   attributes.push(['breast',/\bbreasts?\b|\bpoitrine\b|صدر|\bsader\b|\bsadr\b/]);
   for(const flavor of ['orange','apple','lemon','strawberry','vanilla','mint','coconut','almond','peach','pineapple','cherry'])attributes.push([flavor,new RegExp('\\b'+flavor+'\\b')]);
@@ -127,6 +134,31 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     for(const id of group.ids){const m=records.get(id);m.productType=group.type;m.familyKey='food:'+group.type;m.variantKey=[m.familyKey,m.brandKey,...m.attributes,...m.qualifiers].join('|');m.searchTerms=[...group.aliases];m.confidence='source-term';}
   }
   const queryCache=new Map();
+  const aliasesByWord=new Map();
+  for(const d of defs)for(const alias of d.aliases)if(/^[a-z]+$/.test(alias)){
+    if(!aliasesByWord.has(alias))aliasesByWord.set(alias,new Set());
+    aliasesByWord.get(alias).add(d.type);
+  }
+  const sourceWords=new Set(products.flatMap(p=>normalize(p.name.en).split(' ')));
+  function distance(a,b){
+    let prev=Array.from({length:b.length+1},(_,i)=>i);
+    for(let i=0;i<a.length;i++){const next=[i+1];for(let j=0;j<b.length;j++)next.push(Math.min(next[j]+1,prev[j+1]+1,prev[j]+Number(a[i]!==b[j])));prev=next;}
+    return prev[b.length];
+  }
+  function canonicalQuery(query){
+    return normalize(query).split(' ').map(word=>{
+      if(aliasesByWord.has(word)||sourceWords.has(word)||!/^[a-z]{5,}$/.test(word))return word;
+      const singular=word.endsWith('ies')?word.slice(0,-3)+'y':word.endsWith('s')?word.slice(0,-1):word;
+      if(aliasesByWord.has(singular))return singular;
+      // Only correct a unique, close product term; never guess ambiguous brands.
+      const candidates=[...aliasesByWord].filter(([term])=>term.length>=5&&term[0]===word[0]&&Math.abs(term.length-word.length)<=2)
+        .map(([term,types])=>({term,types,d:distance(term,word)})).filter(c=>c.d<=(word.length>=7?2:1)).sort((a,b)=>a.d-b.d);
+      if(!candidates.length)return word;
+      const best=candidates.filter(c=>c.d===candidates[0].d);
+      const meaning=c=>[...c.types].sort().join('|')+'|'+attributes.filter(([,rx])=>rx.test(c.term)).map(([tag])=>tag).join('|');
+      return new Set(best.map(meaning)).size===1&&best.every(c=>c.types.size===1)?best[0].term:word;
+    }).join(' ');
+  }
   function queryInfo(query){
     const text=normalize(query);
     if(queryCache.has(text))return queryCache.get(text);
@@ -137,6 +169,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     let residue=text;
     const matchedAliases=defs.filter(d=>d.type===longest?.type).flatMap(d=>d.aliases).filter(a=>whole(text,a)).sort((a,b)=>b.length-a.length);
     for(const alias of [...requestedBrands,...matchedAliases]) residue=(' '+residue+' ').replace(' '+alias+' ',' ').trim();
+    for(const [,pattern] of [...attributes,...qualifiers]) residue=residue.replace(pattern,' ').trim();
     residue=residue.replace(/\b(?:and|or|ou|the|a|an|of|for|about|plain|regular|all purpose|wheat|white|brown|red|green|black|fresh|frozen|dry|dried|ground|whole|split|chopped|finely|roughly|diced|sliced|peeled|grated|minced|freshly|seeds?|leaves|powder|to taste|gluten free|lactose free|unsalted|organic|vegan|basmati|long grain|short grain|coarse|fine|cooking|heavy|whipping|g|kg|ml|l)\b|\d+/g,'').replace(/\s+/g,'').trim();
     residue=residue.replace(/ناشفه|ناشف|مجفف|جاف|مطحون|طازج|مفروم|مقطع|كامل|احمر|اخضر|ابيض|اسمر|\b(?:secs?|seche|seches|moulu|moulue|entier|entiere|frais|fraiche|rouge|vert|blanc)\b|او/g,'').trim();
     residue=residue.replace(/^(?:yellow|jaune|safra|asfar|اصفر|صفراء|breasts?|poitrine|صدر|sader|sadr)$/,'');
@@ -164,7 +197,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
       else if((opposite[a]||[]).some(x=>meta.attributes.includes(x)))return false;
     }
     const shapes=['fettuccine','spaghetti','penne','fusilli','macaroni','tagliatelle','lasagna','linguine','farfalle'];
-    const cheeses=['parmesan','mozzarella','cheddar','feta','halloumi','kashkaval'];
+    const cheeses=Object.keys(cheeseVarieties);
     if(info.attributes.includes('breast')&&!meta.attributes.includes('breast'))return false;
     for(const group of [shapes,cheeses])if(info.attributes.some(x=>group.includes(x))&&!info.attributes.filter(x=>group.includes(x)).some(x=>meta.attributes.includes(x)))return false;
     return true;
@@ -185,5 +218,5 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     return {productCount:records.size,departments:count('department'),aisles:count('aisles'),productTypes:count('productType'),familyCount:families.size,
       typedProducts:[...records.values()].filter(m=>m.confidence!=='source-name').length,unbranded:[...records.values()].filter(m=>!m.brandKey).length};
   }
-  return{records,queryInfo,compatible,alternatives,facets};
+  return{records,queryInfo,canonicalQuery,compatible,alternatives,facets};
 }

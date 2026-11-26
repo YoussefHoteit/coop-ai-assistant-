@@ -69,7 +69,9 @@ test('internal search narration is rewritten as a natural COOP answer', async ()
     return Response.json({output:output({texts:slots.map(row=>({...row,text:row.key==='answer'?'Yes, we have Del Libano Fettucine Verdi 400g for $2.85.':row.text}))})});
   };
   try {
-    const data = await (await worker.fetch(request('Do you have fettuccinin pasta?'), { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' })).json();
+    // A mixed request still requires conversational prose; plain availability
+    // lookups now use the complete, deterministic retail listing.
+    const data = await (await worker.fetch(request('Do you have fettuccinin pasta and could you tell me about it?'), { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' })).json();
     assert.equal(calls, 3);
     assert.equal(data.text, 'Yes, we have Del Libano Fettucine Verdi 400g for $2.85.');
     assert.equal(data.products[0].id, '5651655');

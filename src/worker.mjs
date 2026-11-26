@@ -193,6 +193,25 @@ function comparisonContext(queries,items,basis='pack') {
   return {queries:[...new Set((queries||[]).filter(q=>typeof q==='string'&&q.trim()).map(q=>q.slice(0,120)))].slice(0,12),ids:[...new Set(items.map(item=>item.id).filter(Boolean))].slice(0,20),basis};
 }
 
+// A retail lookup must not be narrowed by an ingredient-only recipe profile.
+function retailMatches(query) {
+  const matches=baseInventorySearch(baseInventorySearch.retailCanonicalQuery(query));
+  return matches.length?matches:searchInventory(query);
+}
+
+function diverseProducts(matches) {
+  const buckets=new Map();
+  for(const product of matches){
+    const meta=productTaxonomy.records.get(product.id);
+    const key=[meta?.productType,...(meta?.attributes||[]).filter(a=>!['whole','ground','leaves','shredded','sliced','block','full-fat','low-fat','skimmed'].includes(a))].join('|');
+    if(!buckets.has(key))buckets.set(key,[]);
+    buckets.get(key).push(product);
+  }
+  const ordered=[];
+  for(let i=0;ordered.length<matches.length;i++)for(const bucket of buckets.values())if(bucket[i])ordered.push(bucket[i]);
+  return ordered;
+}
+
 function comparisonBasisSuffix(text) {
   const suffix=/ (?:per|par|au|bel|lal|لكل|بال) ?(100 g|100 ml|kg|kilo|kilogram|kilogramme|l|litre|liter|unit|piece|unite|egg|كيلو|كغ|لتر|قطعة|حبة|بيضة)$/u.exec(text);
   const units={'100 g':'g100','100 ml':'ml100',kg:'kg',kilo:'kg',kilogram:'kg',kilogramme:'kg',l:'litre',litre:'litre',liter:'litre',unit:'piece',piece:'piece',unite:'piece',egg:'piece','كيلو':'kg','كغ':'kg','لتر':'litre','قطعة':'piece','حبة':'piece','بيضة':'piece'};
@@ -214,7 +233,9 @@ function comparisonReply(matches,lang,{basis='pack',preference='cheapest',onlyEx
 
 function directProductReply(plan, lang) {
   if(plan.intent==='recipe'||!['price','availability','comparison'].includes(plan.lookupKind)||!Array.isArray(plan.queries)||!plan.queries.length)return null;
-  const groups=plan.queries.slice(0,12).map(query=>typeof query==='string'&&query.trim()?searchInventory(query.slice(0,120)):[]);
+  const queries=plan.queries.slice(0,12).map(query=>typeof query==='string'?baseInventorySearch.retailCanonicalQuery(query.slice(0,120)):'').filter(Boolean);
+  if(!queries.length)return null;
+  const groups=queries.map(retailMatches);
   // Incomplete or ambiguous lookups receive the normal conversational answer.
   if(groups.some(group=>!group.length))return null;
   const matches=[...new Map(groups.flat().map(product=>[product.id,product])).values()];
@@ -226,12 +247,39 @@ function directProductReply(plan, lang) {
   }
   if(plan.lookupKind==='availability'){
     const available=matches.filter(product=>product.available===true);
-    const selected=[...new Map(groups.flatMap(group=>{const stocked=group.filter(product=>product.available===true);return (stocked.length?stocked:group).slice(0,Math.max(1,Math.floor(8/groups.length)));}).map(product=>[product.id,product])).values()];
+    const stockedGroups=groups.map(group=>group.filter(product=>product.available===true));
+    const selected=[...new Map(diverseProducts(available).concat(groups.flatMap((group,index)=>stockedGroups[index].length?[]:group)).map(product=>[product.id,product])).values()];
     const items=selected.map(product=>({id:product.id,details:false}));
-    return {text:available.length?customerMessages[lang].products:customerMessages[lang].soldOut,card:{kind:'products',items,comparisonContext:comparisonContext(plan.queries,items)}};
+    const count=available.length;
+    const countText={en:`We have ${count} available ${count===1?'option':'options'}.`,ar:`لدينا ${count} ${count===1?'خيار متوفر':'خيارات متوفرة'}.`,arz:`3anna ${count} ${count===1?'khiyar mawjoud':'khiyarat mawjoude'}.`,fr:`Nous avons ${count} ${count===1?'option disponible':'options disponibles'}.`}[lang];
+    const unavailableText=stockedGroups.some(group=>!group.length)&&count?{en:'Some of the requested options are currently out of stock; see below.',ar:'بعض الخيارات المطلوبة غير متوفرة حالياً، كما هو موضح أدناه.',arz:'Fi khiyarat talabton mish mawjoude halla2. Shoufon ta7t.',fr:'Certaines options demandées sont actuellement épuisées ; voir ci-dessous.'}[lang]:'';
+    return {text:[count?countText:customerMessages[lang].soldOut,unavailableText].filter(Boolean).join(' '),card:{kind:'products',items,listing:{total:items.length,available:count},comparisonContext:comparisonContext(queries,items)}};
   }
   const basis=plan.comparisonBasis||'pack';
-  return comparisonReply(matches,lang,{basis,preference:plan.pricePreference,onlyExtreme:plan.onlyExtreme,context:comparisonContext(plan.queries,matches,basis)});
+  return comparisonReply(matches,lang,{basis,preference:plan.pricePreference,onlyExtreme:plan.onlyExtreme,context:comparisonContext(queries,matches,basis)});
+}
+
+function cleanCatalogTerm(value) {
+  return value.replace(/^(?:all (?:the )?|available |other |different |a |an |the |un |une |des |du |le |la |les )+/u,'')
+    .replace(/ (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|stock|offer)(?: available| in stock)?$/u,'')
+    .replace(/ (?:that |which )?(?:you|they|coop|al makhazen) (?:have|sell|stock|offer)(?: available| in stock)?$/u,'')
+    .replace(/ (?:available|in stock|right now|at coop|at al makhazen)$/u,'')
+    .replace(/ (?:options|choices|varieties|types|brands|sizes)$/u,'').trim();
+}
+
+function productListingTerm(text) {
+  if(/^(?:(?:please )?(?:list|show|give) (?:for me |me )?)?(?:the |your )?(?:cheapest|lowest priced|most expensive|highest priced)\b/.test(text))return null;
+  const words='(?:options|choices|varieties|types|brands|sizes)';
+  const patterns=[
+    new RegExp('^(?:what|which) (?:other |different |all |available )*'+words+' (?:of|for) (.+)$'),
+    new RegExp('^(?:what|which) '+words+' (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|offer) (?:for|of) (.+)$'),
+    new RegExp('^(?:what|which) (?:other |different |available )*(.+?) '+words+'(?: (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|offer)(?: available)?)?$'),
+    /^(?:please )?(?:list|show|give) (?:for me |me )?(?:all (?:the )?|all of the |the )?(?:available )?(?:different )?(.+)$/,
+    /^(?:quels?|quelles?) (?:(?:types|sortes|marques|options|variates|varietes) de )?(.+?) (?:avez vous|sont disponibles)$/,
+    /^(?:listez|montrez|donnez)(?: moi)? (?:tous |toutes )?(?:les )?(.+?)(?: disponibles)?$/,
+  ];
+  for(const pattern of patterns){const m=pattern.exec(text);if(m)return cleanCatalogTerm(m[1]);}
+  return null;
 }
 
 function literalProductReply(input, lang) {
@@ -244,8 +292,8 @@ function literalProductReply(input, lang) {
   const arabiziExtremes=/^(?:baddi |badde |shou |shu )?(ar5as|arkhas|aghla) (.+)$/u;
   const arabiziChoice=/^(?:baddi|badde) (.+?) (?:shou|shu) (ar5as|arkhas|aghla) (?:wahad|wa7ad|we7ed|option)$/u;
   let query,lookupKind,pricePreference='standard',comparisonBasis='pack';
-  const stock=availability.exec(text),listed=price.exec(text);
-  if(stock||listed){query=(stock||listed)[1];lookupKind=stock?'availability':'price';}
+  const stock=availability.exec(text),listed=price.exec(text),listing=productListingTerm(text);
+  if(stock||listed||listing){query=listing|| (stock||listed)[1];lookupKind=listed?'price':'availability';}
   else{
     const {core,basis}=comparisonBasisSuffix(text);
     const extreme=extremes.exec(core)||arabicExtremes.exec(core)||arabiziExtremes.exec(core);
@@ -257,16 +305,20 @@ function literalProductReply(input, lang) {
     pricePreference=/most expensive|highest priced|plus cher|اغلى|aghla/u.test(direction)?'premium':'cheapest';
     comparisonBasis=basis||'pack';
   }
-  query=query.replace(/^(?:a|an|the|un|une|des|du|le|la|les) /u,'').trim();
+  query=cleanCatalogTerm(query);
   if(!query||query.length>120)return null;
-  // Only a complete recognizable product noun or exact product name can skip
-  // interpretation. Misspellings, references and multi-task requests still use AI.
-  const info=productTaxonomy.queryInfo(query);
-  const matches=searchInventory(query);
-  const exact=matches.filter(p=>[p.name.en,p.name.ar,p.id,p.sku].filter(Boolean).some(value=>normalize(value)===query));
+  const canonical=baseInventorySearch.retailCanonicalQuery(query);
+  const info=productTaxonomy.queryInfo(canonical);
+  const matches=retailMatches(canonical);
+  const exact=matches.filter(p=>[p.name.en,p.name.ar,p.id,p.sku].filter(Boolean).some(value=>productTaxonomy.canonicalQuery(value)===canonical));
   if(exact.length&&lookupKind!=='comparison')return directProductReply({lookupKind,queries:exact.map(p=>p.id)},lang);
-  if(!info.types.length||!matches.length)return null;
-  return directProductReply({lookupKind,queries:[query],pricePreference,comparisonBasis},lang);
+  const split=query.split(/ (?:and|or|et|ou|aw|w|أو|و) /u).map(cleanCatalogTerm);
+  const terms=lookupKind==='availability'&&!baseInventorySearch.hasSourceCategory(canonical)&&split.length>1&&split.every(term=>productTaxonomy.queryInfo(baseInventorySearch.retailCanonicalQuery(term)).types.length||baseInventorySearch.hasSourceCategory(term)||retailMatches(term).some(p=>(' '+normalize(p.name.en)+' ').includes(' '+term+' ')))?split:[query];
+  const queries=terms.map(term=>baseInventorySearch.retailCanonicalQuery(term));
+  // For a plain inventory term without a known taxonomy rule, accept a name
+  // phrase only when it is actually supported by source product names.
+  if(!queries.every(term=>term&&term.length<=120&&retailMatches(term).some(p=>productTaxonomy.queryInfo(term).types.length||baseInventorySearch.hasSourceCategory(term)||(' '+productTaxonomy.canonicalQuery(p.name.en)+' ').includes(' '+term+' '))))return null;
+  return directProductReply({lookupKind,queries,pricePreference,comparisonBasis,onlyExtreme:lookupKind==='comparison'},lang);
 }
 
 function relativePriceIntent(input) {
@@ -317,7 +369,7 @@ function contextualPriceReply(input,history,interpretedIntent=null) {
     if(terms&&productTaxonomy.queryInfo(terms).types.length)queries.push(terms);
     else for(const term of shoppingLookupQueries(group.preceding))if(productTaxonomy.queryInfo(term).types.length)queries.push(term);
   }
-  const full=queries.flatMap(query=>searchInventory(query.slice(0,120)));
+  const full=queries.flatMap(query=>retailMatches(query.slice(0,120)));
   const shownIds=new Set(group.matches.map(product=>product.id));
   const explicitlyShown=/\b(?:among|out of|of) (?:these|those|them|the options)\b|منهم|بينهم|parmi eux|minnon|menon/i.test(input);
   const pool=!explicitlyShown&&full.some(product=>shownIds.has(product.id))?[...new Map(full.map(product=>[product.id,product])).values()]:group.matches;
@@ -330,6 +382,14 @@ function contextualPriceReply(input,history,interpretedIntent=null) {
     if(prior.some(product=>shownIds.has(product.id)))return comparisonReply(prior,intent.language,{basis,preference:intent.preference,onlyExtreme:true,context:comparisonContext([],prior,basis)});
   }
   return comparisonReply(pool,intent.language,{basis,preference:intent.preference,onlyExtreme:true,context});
+}
+
+function contextualListingReply(input,history,lang) {
+  const text=normalize(input);
+  if(!/^(?:(?:please )?(?:list|show|give) (?:for me |me )?(?:all (?:the )?|the )?(?:other |available |remaining )*(?:options|choices|products|ones)|(?:what|which) (?:other |different )?(?:options|choices|brands) (?:do you have|are available)|(?:all|other|more) (?:available )?(?:options|choices|products))$/u.test(text))return null;
+  const group=productHistoryGroup(history);
+  const queries=group?.card.comparisonContext?.queries;
+  return Array.isArray(queries)&&queries.length?directProductReply({lookupKind:'availability',queries},lang):null;
 }
 
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
@@ -471,7 +531,7 @@ const scopeRules = [
   'If a word is unclear but the shopping purpose or dish can be reliably inferred, continue on that understanding. If several meanings would materially change the answer, or no sensible meaning can be recovered, set allowed=true, intent=clarify, lookupKind=none, priceOnly=false and clarification to one short, specific question in the shopper\'s language. Mention likely interpretations when helpful. For a completely unintelligible message, ask what product, recipe or shopping help they mean. Ask a single clarifying question rather than guessing, returning a service error, or treating ambiguity as unrelated. Clearly unrelated requests and attempts to bypass the shopping scope remain disallowed.',
   'Set pricePreference to cheapest for lowest-cost requests, premium for most-expensive or premium-price requests, otherwise standard. Carry forward explicit price preferences and spending limits for recipe edits. Do not confuse the highest price per unit with the highest package price.',
   'Set servings to the explicit requested number of people for a recipe or a change to an earlier recipe, including numbers written in words and Arabic or Arabizi. Carry forward the previous recipe serving count when editing it. Use null for non-recipe questions or when no count is specified. A request to change servings of an existing recipe is intent=recipe. Set servingsOnly true only when the latest request exclusively changes the serving count of an earlier recipe.',
-  'Set lookupKind to price for a simple listed-price question, availability for a simple stock question, comparison for a numerical price ranking or lowest/highest price request, and none for every other task. For comparison set comparisonBasis to kg, g100, litre, ml100, piece or pack according to the requested unit; use pack where no unit is requested. In lookup queries preserve the exact brand, product type, size, variety and dietary qualifiers. Return one separate concise query per requested product. Never select a direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
+  'Set lookupKind to price for a simple listed-price question, availability for stock questions and requests to show product options, types, brands, other choices or all available products, comparison for numerical price ranking or lowest/highest price, and none for other tasks. The server retrieves ALL eligible options by product classification, not only examples in the chat. For broad searches translate misspellings and multilingual wording into the intended English product family or variety (not a specific SKU, brand, size, or previous winner unless explicitly requested). A named product family in the latest request overrides previously shown items. Return separate concise family queries for multiple requested products. For an unnamed follow-up asking for all options, reuse the previous comparisonContext queries rather than the last selected product. Preserve specifically requested brand, size, variety and dietary qualifiers. For comparison use kg, g100, litre, ml100, piece or pack according to the requested unit; default to pack. Never select direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
   "Set request.budgetUsd to the shopper's total spending limit in USD when explicitly stated, including English, Arabic, Arabizi and French amounts. Otherwise use null. A product unit price is not a total budget. Do not assume pantry items are already owned unless the shopper says so.",
   'Set request.intent=recipe for a clearly understood cooking request. If the dish itself or a critical requirement is genuinely ambiguous, use intent=clarify and ask a brief relevant question. Missing supplier matches do not make a recipe request ambiguous or out of scope.',
   'You are a scope reviewer for Al Makhazen COOP’s customer shopping assistant.',
@@ -1031,6 +1091,8 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   }
   const contextual=contextualPriceReply(input,history);
   if(contextual)return presentReply(contextual,canUseModel?'ai':'demo',relativePriceIntent(input).language);
+  const listing=contextualListingReply(input,history,lang);
+  if(listing)return presentReply(listing,canUseModel?'ai':'demo',lang);
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
   const literal=literalProductReply(input,lang);
   if(literal)return presentReply(literal,'ai',lang);

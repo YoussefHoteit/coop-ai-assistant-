@@ -248,8 +248,14 @@ function renderCard(card, language) {
   }
   cardNode.append(intro);
 
+  // Large product result sets are complete, but rendered in manageable pages.
+  // All options remain available without creating hundreds of DOM rows at once.
+  const paged=!recipe&&card.listing&&card.items.length>24;
+  const visible=paged?Math.min(card.items.length,card.visibleCount||24):card.items.length;
+  const listingCopy={en:{shown:'Showing',of:'of',more:'Show more products',add:'Add shown items'},ar:{shown:'عرض',of:'من',more:'عرض المزيد من المنتجات',add:'أضف المنتجات المعروضة'},arz:{shown:'3am nfarje',of:'men',more:'Farjine products aktar',add:'Zid el products li mbayyanin'},fr:{shown:'Affichage de',of:'sur',more:'Voir plus de produits',add:'Ajouter les articles affichés'}}[language]||{shown:'Showing',of:'of',more:'Show more products',add:'Add shown items'};
+  if(paged)intro.append(element('small','',`${listingCopy.shown} ${number(visible)} ${listingCopy.of} ${number(card.items.length)}`));
   const addable = [];
-  for (const item of card.items) {
+  for (const item of card.items.slice(0,visible)) {
     const product = products.get(item.id);
     const row = element('div', 'product-row');
     row.lang=ingredientLanguage==='arz'?'ar-Latn-LB':ingredientLanguage;
@@ -292,10 +298,18 @@ function renderCard(card, language) {
 
   if (addable.length > 1 || (recipe && addable.length === 1)) {
     const footer = element('div', 'card-footer');
-    footer.append(button('primary', ingredientText(recipe ? 'all' : 'allProducts'), 'plus',
+    footer.append(button('primary', paged&&visible<card.items.length?listingCopy.add:ingredientText(recipe ? 'all' : 'allProducts'), 'plus',
       event => addToList(card.listKey, addable, language, recipe, event.currentTarget)));
     if (recipe) intro.after(footer);
     else cardNode.append(footer);
+  }
+  if(paged&&visible<card.items.length){
+    const footer=element('div','card-footer');
+    footer.append(button('primary card-more',`${listingCopy.more} (${number(Math.min(24,card.items.length-visible))})`,null,()=>{
+      card.visibleCount=visible+24;
+      saveChat();renderChat('preserve');
+    }));
+    cardNode.append(footer);
   }
   return cardNode;
 }
@@ -451,13 +465,15 @@ function conversationHistory() {
       kind: card.kind,
       ...(card.kind==='products'&&card.comparisonContext&&{comparisonContext:card.comparisonContext}),
       ...(card.kind === 'recipe' && { recipeKey: card.listKey, title: card.title, servings: card.servings }),
-      items: card.items.map(item => {
+      items: (card.kind==='products'?card.items.slice(0,12):card.items).map(item => {
         const product = products.get(item.id);
         return [item.id, product?.name.en || item.name, item.amount, product?.size.en, product?.price, product?.available, item.grams, item.catalogQuery];
       }),
     };
-    const entry = { role, content: [summary && JSON.stringify(summary), content, ...(card?.steps ?? [])]
-      .filter(Boolean).join('\n').slice(0, 3000) };
+    // Keep card metadata as complete JSON even for a very large choice list.
+    if(summary)while(summary.items.length>1&&JSON.stringify(summary).length>2400)summary.items.pop();
+    const metadata=summary?JSON.stringify(summary)+'\n':'';
+    const entry = { role, content: metadata+[content,...(card?.steps??[])].filter(Boolean).join('\n').slice(0,Math.max(0,3000-metadata.length)) };
     bytes += encoder.encode(JSON.stringify(entry)).byteLength + 1;
     if (bytes > 27000) break;
     history.unshift(entry);

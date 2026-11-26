@@ -1,6 +1,8 @@
 import { createProductTaxonomy } from './inventory-taxonomy.mjs';
 // Index once per server instance. Only matching records are sent to the AI.
 export function createInventorySearch(products, categoryLabels, normalize) {
+  const originalNormalize=normalize;
+  normalize=value=>originalNormalize(value).replace(/(?<!\d)\.|\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
   const taxonomy = createProductTaxonomy(products, categoryLabels, normalize);
   const groups = [
     ['chicken', 'دجاج', 'جاج', 'poulet', 'djej', 'jaj'],
@@ -52,9 +54,38 @@ export function createInventorySearch(products, categoryLabels, normalize) {
     const nameTokens = new Set(wordsOf(product.name.en).map(singular));
     return { product, name, names, identifiers, tokens, nameTokens, categoryKeys };
   });
+  // Exact department/aisle aliases come from the inventory itself, so new
+  // categories can be searched even when no hand-authored type exists.
+  const sourceCategories=new Map();
+  const sourceTerms=new Map();
+  const categoryKey=value=>normalize(value).replace(/\band\b/g,' ').replace(/\s+/g,' ').trim();
+  for(const entry of indexed){
+    const labels=[...entry.categoryKeys.flatMap(key=>categoryLabels[key]||[]),...(entry.product.subcategory||'').split(',')];
+    for(const label of labels){
+      const key=categoryKey(label);
+      if(!key||/offer|promotion|buy.*win|^\d|^\$/.test(key))continue;
+      if(!sourceCategories.has(key))sourceCategories.set(key,new Set());
+      sourceCategories.get(key).add(entry.product.id);
+    }
+    for(const word of new Set(wordsOf(entry.product.name.en)))if(/^[a-z]{5,}$/.test(word))sourceTerms.set(word,(sourceTerms.get(word)||0)+1);
+  }
+  const spellingTerms=[...new Set([...sourceTerms].filter(([,n])=>n>=2).map(([word])=>word).concat([...sourceCategories.keys()].filter(key=>/^[a-z]{5,}$/.test(key))))];
+  function distance(a,b){let prev=Array.from({length:b.length+1},(_,i)=>i);for(let i=0;i<a.length;i++){const row=[i+1];for(let j=0;j<b.length;j++)row.push(Math.min(row[j]+1,prev[j+1]+1,prev[j]+Number(a[i]!==b[j])));prev=row;}return prev[b.length];}
+  function retailCanonicalQuery(input){
+    const query=taxonomy.canonicalQuery(input);
+    if(taxonomy.queryInfo(query).types.length||sourceCategories.has(categoryKey(query)))return query;
+    // Fallback only for retail queries: a unique close spelling in supplier
+    // names or aisles, never a forced guess for an ambiguous word.
+    return query.split(' ').map(word=>{
+      if(sourceTerms.has(word)||!/^[a-z]{6,}$/.test(word))return word;
+      const alternatives=spellingTerms.filter(term=>term[0]===word[0]&&Math.abs(term.length-word.length)<=1).filter(term=>distance(term,word)===1);
+      return alternatives.length===1?alternatives[0]:word;
+    }).join(' ');
+  }
   function search(input = '', category) {
-    const query = normalize(input);
+    const query = taxonomy.canonicalQuery(input);
     const queryInfo = taxonomy.queryInfo(query);
+    const categoryIds=!queryInfo.types.length&&sourceCategories.get(categoryKey(query));
     const queryWords = wordsOf(query);
     const queryVariants = [...new Set([...(variants.get(query) || variants.get(singular(query)) || [query]),...queryInfo.aliases])];
     return indexed.filter(entry => !category || entry.categoryKeys.includes(category) ||
@@ -62,12 +93,16 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       if (!query) return { entry, score: 1 };
       if (normalize(entry.product.id) === query) return { entry, score: 10000 };
       if (entry.identifiers.includes(query)) return { entry, score: 9000 };
+      if(categoryIds)return {entry,score:categoryIds.has(entry.product.id)?1500:0};
       const meta = taxonomy.records.get(entry.product.id);
       if ((queryInfo.types.length || queryInfo.qualifiers.length || queryInfo.brands.length) && !taxonomy.compatible(queryInfo,entry.product)) return {entry,score:0};
       // An alias for the general commodity cannot satisfy an explicit variety.
       const requiredAttributes=queryInfo.attributes.filter(attribute=>attribute!=='whole'||!queryInfo.qualifiers.includes('whole-wheat'));
       const alternativeColours=/\bor\b|\bou\b/.test(query)&&requiredAttributes.filter(attribute=>['red','brown','green','white','yellow'].includes(attribute)).length>1;
       if(queryInfo.types.length && requiredAttributes.some(attribute=>!meta.attributes.includes(attribute)&&!(alternativeColours&&['red','brown','green','white','yellow'].includes(attribute))))return {entry,score:0};
+      // A typed, unqualified family lookup is a metadata lookup, not a literal
+      // substring filter. Explicit pack sizes still require a name/size match.
+      if(queryInfo.types.includes(meta.productType)&&!queryInfo.brands.length&&!/\d/.test(query)&&meta.confidence!=='source-name'&&queryInfo.aliases.includes(query))return {entry,score:1800};
       if (entry.names.includes(query)) return { entry, score: 1000 + Number(meta.confidence!=='source-name'&&queryInfo.types.includes(meta.productType))*800 };
       let score = 0;
       if (queryVariants.some(term => entry.names.some(name => (' ' + name + ' ').includes(' ' + term + ' ')))) score = 500;
@@ -87,5 +122,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       .map(({ entry }) => entry.product);
   }
   search.taxonomy = taxonomy;
+  search.retailCanonicalQuery=retailCanonicalQuery;
+  search.hasSourceCategory=query=>sourceCategories.has(categoryKey(query));
   return search;
 }
