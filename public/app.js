@@ -459,9 +459,9 @@ function conversationHistory() {
   const encoder = new TextEncoder();
   const history = [];
   let bytes = 0;
-  for (const { role, content, card, error } of chat.slice(-100).reverse()) {
+  for (const { role, content, card, typeSelection, error } of chat.slice(-100).reverse()) {
     if (error || (!content && !card)) continue;
-    const summary = card && {
+    const summary = typeSelection ? {kind:'types',queries:typeSelection.queries} : card && {
       kind: card.kind,
       ...(card.kind==='products'&&card.comparisonContext&&{comparisonContext:card.comparisonContext}),
       ...(card.kind === 'recipe' && { recipeKey: card.listKey, title: card.title, servings: card.servings }),
@@ -471,7 +471,7 @@ function conversationHistory() {
       }),
     };
     // Keep card metadata as complete JSON even for a very large choice list.
-    if(summary)while(summary.items.length>1&&JSON.stringify(summary).length>2400)summary.items.pop();
+    if(summary?.items)while(summary.items.length>1&&JSON.stringify(summary).length>2400)summary.items.pop();
     const metadata=summary?JSON.stringify(summary)+'\n':'';
     const entry = { role, content: metadata+[content,...(card?.steps??[])].filter(Boolean).join('\n').slice(0,Math.max(0,3000-metadata.length)) };
     bytes += encoder.encode(JSON.stringify(entry)).byteLength + 1;

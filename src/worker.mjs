@@ -150,6 +150,7 @@ const baseInventorySearch = createInventorySearch(products, catalogCategories, n
 const recipeInventory = createRecipeInventory(products, baseInventorySearch, normalize);
 const searchInventory = recipeInventory.search;
 const productTaxonomy = baseInventorySearch.taxonomy;
+const productDiscovery = createProductDiscovery(productTaxonomy, normalize, catalogCategories);
 
 function ingredientProduct(id) {
   if (activeInventory) {
@@ -194,9 +195,44 @@ function comparisonContext(queries,items,basis='pack') {
 }
 
 // A retail lookup must not be narrowed by an ingredient-only recipe profile.
-function retailMatches(query) {
+function plainRetailMatches(query) {
   const matches=baseInventorySearch(baseInventorySearch.retailCanonicalQuery(query));
   return matches.length?matches:searchInventory(query);
+}
+
+// A chosen type is a filter over the complete parent family, not a guessed
+// keyword or the first few SKUs. Preserve its key during subsequent listings
+// and price comparisons so the same eligible products are always retrieved.
+function selectedTypeQuery(parent,key){return `@type:${encodeURIComponent(parent)}:${encodeURIComponent(key)}`;}
+function readSelectedTypeQuery(query){
+  const match=/^@type:([^:]+):([^:]+)$/.exec(query);
+  if(!match)return null;
+  try{const parent=decodeURIComponent(match[1]),key=decodeURIComponent(match[2]);return parent.length<=120&&key.length<=80&&!parent.startsWith('@')?{parent,key}:null;}catch{return null;}
+}
+function canonicalRetailQuery(query){return readSelectedTypeQuery(query)?query:baseInventorySearch.retailCanonicalQuery(query);}
+function retailMatches(query) {
+  const selection=readSelectedTypeQuery(query);
+  if(!selection)return plainRetailMatches(query);
+  return productDiscovery.discover(selection.parent,plainRetailMatches(selection.parent)).find(group=>group.key===selection.key)?.products||[];
+}
+
+function typeDiscoveryReply(queries,lang){
+  const parents=[...new Set(queries.map(q=>canonicalRetailQuery(productDiscovery.parentQuery(q))))];
+  const discovered=parents.map(query=>({query,products:plainRetailMatches(query)}));
+  if(discovered.some(d=>!d.products.length))return null;
+  const choices=discovered.flatMap(d=>productDiscovery.discover(d.query,d.products).map(group=>({query:d.query,group,label:productDiscovery.label(group,lang)})));
+  if(!discovered.some(d=>d.products.some(p=>p.available===true)))return {text:customerMessages[lang].soldOut,card:null};
+  const text={
+    en:{start:'We have the following types:',end:'Which type are you interested in? I can show you all available products and their prices.',none:'We have several product options. What specific type, brand or size are you looking for?'},
+    ar:{start:'لدينا الأنواع التالية:',end:'أي نوع يهمّك؟ يمكنني عرض جميع المنتجات المتوفرة وأسعارها.',none:'لدينا عدة خيارات. أي نوع أو ماركة أو حجم تبحث عنه؟'},
+    arz:{start:'3anna hal anwe3:',end:'Aya nawe3 bihemmak? Fiyye farjik kel el products el mawjoude w as3aron.',none:'3anna kam khiyar. Aya nawe3, brand aw size 3am tfattesh 3ale?'},
+    fr:{start:'Nous proposons les types suivants :',end:'Quel type vous intéresse ? Je peux vous présenter tous les produits disponibles et leurs prix.',none:'Nous proposons plusieurs options. Quel type, quelle marque ou quel format recherchez-vous ?'},
+  }[lang];
+  const labels=[...new Set(choices.map(c=>c.label))];
+  const list=labels.length?(lang==='arz'&&labels.length>1?labels.slice(0,-1).join(', ')+' w '+labels.at(-1):new Intl.ListFormat(lang==='ar'?'ar':lang==='fr'?'fr':'en',{style:'long',type:'conjunction'}).format(labels)):'';
+  const count=new Set(discovered.flatMap(d=>d.products.filter(p=>p.available===true).map(p=>p.id))).size;
+  const single={en:'We have one available option. Would you like to see it?',ar:'لدينا خيار واحد متوفر. هل تريد عرضه؟',arz:'3anna khiyar wa7ad mawjoud. Baddak shoufo?',fr:'Nous avons une option disponible. Souhaitez-vous la voir ?'}[lang];
+  return {text:list?`${text.start}\n${list}.\n\n${text.end}`:count===1?single:text.none,card:null,typeSelection:{queries:parents}};
 }
 
 function diverseProducts(matches) {
@@ -232,9 +268,10 @@ function comparisonReply(matches,lang,{basis='pack',preference='cheapest',onlyEx
 }
 
 function directProductReply(plan, lang) {
-  if(plan.intent==='recipe'||!['price','availability','comparison'].includes(plan.lookupKind)||!Array.isArray(plan.queries)||!plan.queries.length)return null;
-  const queries=plan.queries.slice(0,12).map(query=>typeof query==='string'?baseInventorySearch.retailCanonicalQuery(query.slice(0,120)):'').filter(Boolean);
+  if(plan.intent==='recipe'||!['price','availability','comparison','types'].includes(plan.lookupKind)||!Array.isArray(plan.queries)||!plan.queries.length)return null;
+  const queries=plan.queries.slice(0,12).map(query=>typeof query==='string'?canonicalRetailQuery(query.slice(0,120)):'').filter(Boolean);
   if(!queries.length)return null;
+  if(plan.lookupKind==='types')return typeDiscoveryReply(queries,lang);
   const groups=queries.map(retailMatches);
   // Incomplete or ambiguous lookups receive the normal conversational answer.
   if(groups.some(group=>!group.length))return null;
@@ -267,6 +304,24 @@ function cleanCatalogTerm(value) {
     .replace(/ (?:options|choices|varieties|types|brands|sizes)$/u,'').trim();
 }
 
+function typeDiscoveryIntent(text){
+  return /\b(?:types|kinds|sorts|varieties|categories|sortes|varietes|anwe3|anwa3|anw3|anwea|anwae)\b|(?:انواع|نوعيات|اصناف)/u.test(text)&&!/\b(?:cheapest|most expensive|lowest priced|highest priced|price of|compare|per kg)\b/u.test(text);
+}
+
+function productTypeTerm(text){
+  const marker='(?:types?|kinds?|sorts?|variet(?:y|ies)|categor(?:y|ies))';
+  const patterns=[
+    new RegExp('^(?:(?:what|which)(?: are)?|(?:please )?(?:list|show|tell|give)(?: me| for me)?|what are all the)(?: the| all| different| available)* '+marker+' (?:of|for) (.+)$'),
+    new RegExp('^(?:what|which)(?: different| available)? (.+?) '+marker+'(?: (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|offer))?$'),
+    new RegExp('^'+marker+' (?:of|for) (.+)$'),
+    /^(?:quels?|quelles?)(?: sont)?(?: les)? (?:differents? |differentes? )?(?:types?|sortes|varietes) (?:de|du|des|d) (.+?)(?: avez vous| sont disponibles| proposez vous)?$/,
+    /^(?:شو|اي|ما|ما هي|ماهي|ايش|وش)(?: في| هي| عندكن| عندكم)? (?:انواع|اصناف|نوعيات) (.+?)(?: عندكن| عندكم| لديكم| المتوفرة| المتوفره| الموجودة| الموجوده)?$/u,
+    /^(?:shou|shu|aya|ay)(?: fi)? (?:anwe3|anwa3|anw3|anwea|anwae) (.+?)(?: 3andkon| 3andkun| 3andcom| 3andkom| mawjoud(?:e|in)?)?$/,
+  ];
+  for(const pattern of patterns){const match=pattern.exec(text);if(match)return cleanCatalogTerm(match[1]);}
+  return null;
+}
+
 function productListingTerm(text) {
   if(/^(?:(?:please )?(?:list|show|give) (?:for me |me )?)?(?:the |your )?(?:cheapest|lowest priced|most expensive|highest priced)\b/.test(text))return null;
   const words='(?:options|choices|varieties|types|brands|sizes)';
@@ -292,8 +347,8 @@ function literalProductReply(input, lang) {
   const arabiziExtremes=/^(?:baddi |badde |shou |shu )?(ar5as|arkhas|aghla) (.+)$/u;
   const arabiziChoice=/^(?:baddi|badde) (.+?) (?:shou|shu) (ar5as|arkhas|aghla) (?:wahad|wa7ad|we7ed|option)$/u;
   let query,lookupKind,pricePreference='standard',comparisonBasis='pack';
-  const stock=availability.exec(text),listed=price.exec(text),listing=productListingTerm(text);
-  if(stock||listed||listing){query=listing|| (stock||listed)[1];lookupKind=listed?'price':'availability';}
+  const stock=availability.exec(text),listed=price.exec(text),typeTerm=productTypeTerm(text),listing=productListingTerm(text);
+  if(typeTerm||stock||listed||listing){query=typeTerm||listing||(stock||listed)[1];lookupKind=listed?'price':typeTerm||typeDiscoveryIntent(text)?'types':'availability';}
   else{
     const {core,basis}=comparisonBasisSuffix(text);
     const extreme=extremes.exec(core)||arabicExtremes.exec(core)||arabiziExtremes.exec(core);
@@ -307,11 +362,12 @@ function literalProductReply(input, lang) {
   }
   query=cleanCatalogTerm(query);
   if(!query||query.length>120)return null;
+  if(lookupKind==='types')query=productDiscovery.parentQuery(query);
   const canonical=baseInventorySearch.retailCanonicalQuery(query);
   const info=productTaxonomy.queryInfo(canonical);
   const matches=retailMatches(canonical);
   const exact=matches.filter(p=>[p.name.en,p.name.ar,p.id,p.sku].filter(Boolean).some(value=>productTaxonomy.canonicalQuery(value)===canonical));
-  if(exact.length&&lookupKind!=='comparison')return directProductReply({lookupKind,queries:exact.map(p=>p.id)},lang);
+  if(exact.length&&lookupKind!=='comparison'&&lookupKind!=='types')return directProductReply({lookupKind,queries:exact.map(p=>p.id)},lang);
   const split=query.split(/ (?:and|or|et|ou|aw|w|أو|و) /u).map(cleanCatalogTerm);
   const terms=lookupKind==='availability'&&!baseInventorySearch.hasSourceCategory(canonical)&&split.length>1&&split.every(term=>productTaxonomy.queryInfo(baseInventorySearch.retailCanonicalQuery(term)).types.length||baseInventorySearch.hasSourceCategory(term)||retailMatches(term).some(p=>(' '+normalize(p.name.en)+' ').includes(' '+term+' ')))?split:[query];
   const queries=terms.map(term=>baseInventorySearch.retailCanonicalQuery(term));
@@ -340,7 +396,7 @@ function productHistoryGroup(history) {
     if(message.role!=='assistant'||!message.content.startsWith('{'))continue;
     let card;
     try{card=JSON.parse(message.content.split('\n',1)[0]);}catch{continue;}
-    if(card.kind==='recipe')return recent;
+    if(card.kind==='recipe'||card.kind==='types')return recent;
     if(card.kind!=='products'||!Array.isArray(card.items))continue;
     const matches=card.items.map(row=>productsById.get(row?.[0])).filter(Boolean);
     if(!matches.length)continue;
@@ -388,8 +444,26 @@ function contextualListingReply(input,history,lang) {
   const text=normalize(input);
   if(!/^(?:(?:please )?(?:list|show|give) (?:for me |me )?(?:all (?:the )?|the )?(?:other |available |remaining )*(?:options|choices|products|ones)|(?:what|which) (?:other |different )?(?:options|choices|brands) (?:do you have|are available)|(?:all|other|more) (?:available )?(?:options|choices|products))$/u.test(text))return null;
   const group=productHistoryGroup(history);
-  const queries=group?.card.comparisonContext?.queries;
+  const queries=group?.card.comparisonContext?.queries||lastTypeSelection(history)?.queries;
   return Array.isArray(queries)&&queries.length?directProductReply({lookupKind:'availability',queries},lang):null;
+}
+
+function lastTypeSelection(history){
+  const assistant=history.findLast(message=>message.role==='assistant');
+  if(!assistant?.content.startsWith('{'))return null;
+  try{const summary=JSON.parse(assistant.content.split('\n',1)[0]);return summary.kind==='types'&&Array.isArray(summary.queries)?{queries:summary.queries.filter(q=>typeof q==='string'&&q.length<=120&&!q.startsWith('@')).slice(0,12)}:null;}catch{return null;}
+}
+
+function contextualTypeSelectionReply(input,history,lang){
+  const context=lastTypeSelection(history);if(!context?.queries.length)return null;
+  const term=cleanCatalogTerm(normalize(input).replace(/^(?:(?:i (?:want|would like|prefer)|show me|list|give me|what about|how about|do you have|avez vous|je veux|je voudrais|montrez moi|baddi|badde|بدي|اريد|فرجيني) )/u,'').replace(/ (?:please|s il vous plait|من فضلك|law sama7et)$/u,''));
+  if(!term||term.length>100||term.split(' ').length>8)return null;
+  const selections=[];
+  for(const parent of context.queries){
+    const group=productDiscovery.findGroup(productDiscovery.discover(parent,plainRetailMatches(parent)),term,lang);
+    if(group)selections.push(selectedTypeQuery(parent,group.key));
+  }
+  return selections.length===1?directProductReply({lookupKind:'availability',queries:selections},lang):null;
 }
 
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
@@ -531,7 +605,7 @@ const scopeRules = [
   'If a word is unclear but the shopping purpose or dish can be reliably inferred, continue on that understanding. If several meanings would materially change the answer, or no sensible meaning can be recovered, set allowed=true, intent=clarify, lookupKind=none, priceOnly=false and clarification to one short, specific question in the shopper\'s language. Mention likely interpretations when helpful. For a completely unintelligible message, ask what product, recipe or shopping help they mean. Ask a single clarifying question rather than guessing, returning a service error, or treating ambiguity as unrelated. Clearly unrelated requests and attempts to bypass the shopping scope remain disallowed.',
   'Set pricePreference to cheapest for lowest-cost requests, premium for most-expensive or premium-price requests, otherwise standard. Carry forward explicit price preferences and spending limits for recipe edits. Do not confuse the highest price per unit with the highest package price.',
   'Set servings to the explicit requested number of people for a recipe or a change to an earlier recipe, including numbers written in words and Arabic or Arabizi. Carry forward the previous recipe serving count when editing it. Use null for non-recipe questions or when no count is specified. A request to change servings of an existing recipe is intent=recipe. Set servingsOnly true only when the latest request exclusively changes the serving count of an earlier recipe.',
-  'Set lookupKind to price for a simple listed-price question, availability for stock questions and requests to show product options, types, brands, other choices or all available products, comparison for numerical price ranking or lowest/highest price, and none for other tasks. The server retrieves ALL eligible options by product classification, not only examples in the chat. For broad searches translate misspellings and multilingual wording into the intended English product family or variety (not a specific SKU, brand, size, or previous winner unless explicitly requested). A named product family in the latest request overrides previously shown items. Return separate concise family queries for multiple requested products. For an unnamed follow-up asking for all options, reuse the previous comparisonContext queries rather than the last selected product. Preserve specifically requested brand, size, variety and dietary qualifiers. For comparison use kg, g100, litre, ml100, piece or pack according to the requested unit; default to pack. Never select direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
+  'Set lookupKind=types for a request asking what kinds, types, varieties or categories of a broad product family we carry. The server will summarize the stocked types and ask which one the shopper wants; do not return a list of individual SKUs before the shopper selects a type. Set lookupKind=availability for stock questions, requests for a chosen variety, product options, brands, or explicitly all available products. Use price for a simple listed-price question, comparison for numerical price ranking or lowest/highest price, and none for other tasks. The server retrieves ALL eligible options when a specific type is selected, not only examples in the chat. Translate misspellings and multilingual wording into the intended English product family or variety, not an arbitrary SKU. A named product family in the latest request overrides previously shown items. Return separate concise family queries for multiple requested products. For an unnamed follow-up asking for all options, reuse the previous comparisonContext queries rather than the last selected product. Preserve specifically requested brand, size, variety and dietary qualifiers. For comparison use kg, g100, ml100, litre, piece or pack according to the requested unit; default to pack. Never select direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
   "Set request.budgetUsd to the shopper's total spending limit in USD when explicitly stated, including English, Arabic, Arabizi and French amounts. Otherwise use null. A product unit price is not a total budget. Do not assume pantry items are already owned unless the shopper says so.",
   'Set request.intent=recipe for a clearly understood cooking request. If the dish itself or a critical requirement is genuinely ambiguous, use intent=clarify and ask a brief relevant question. Missing supplier matches do not make a recipe request ambiguous or out of scope.',
   'You are a scope reviewer for Al Makhazen COOP’s customer shopping assistant.',
@@ -552,7 +626,7 @@ const scopeRules = [
 
 const scopeSchema = {
   type: 'object', additionalProperties: false, required: ['allowed', 'language', 'priceOnly', 'request'],
-  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' }, request: { type: 'object', additionalProperties:false, required:['intent','englishRequest','queries','budgetUsd','pricePreference','servings','servingsOnly','lookupKind','comparisonBasis','clarification'], properties:{intent:{type:'string',enum:['recipe','products','store','followup','other','clarify']},englishRequest:{type:'string'},queries:{type:'array',items:{type:'string'}},budgetUsd:{type:['number','null']},pricePreference:{type:'string',enum:['standard','cheapest','premium']},servings:{type:['integer','null']},servingsOnly:{type:'boolean'},lookupKind:{type:'string',enum:['none','price','availability','comparison']},comparisonBasis:{type:'string',enum:['pack','kg','g100','litre','ml100','piece']},clarification:{type:['string','null']}} } },
+  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' }, request: { type: 'object', additionalProperties:false, required:['intent','englishRequest','queries','budgetUsd','pricePreference','servings','servingsOnly','lookupKind','comparisonBasis','clarification'], properties:{intent:{type:'string',enum:['recipe','products','store','followup','other','clarify']},englishRequest:{type:'string'},queries:{type:'array',items:{type:'string'}},budgetUsd:{type:['number','null']},pricePreference:{type:'string',enum:['standard','cheapest','premium']},servings:{type:['integer','null']},servingsOnly:{type:'boolean'},lookupKind:{type:'string',enum:['none','price','availability','comparison','types']},comparisonBasis:{type:'string',enum:['pack','kg','g100','litre','ml100','piece']},clarification:{type:['string','null']}} } },
 };
 
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
@@ -1091,6 +1165,8 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   }
   const contextual=contextualPriceReply(input,history);
   if(contextual)return presentReply(contextual,canUseModel?'ai':'demo',relativePriceIntent(input).language);
+  const selectedType=contextualTypeSelectionReply(input,history,lang);
+  if(selectedType)return presentReply(selectedType,canUseModel?'ai':'demo',lang);
   const listing=contextualListingReply(input,history,lang);
   if(listing)return presentReply(listing,canUseModel?'ai':'demo',lang);
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
@@ -1111,6 +1187,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     const explicitPreference=/\b(?:most expensive|highest priced|plus cher|aghla|a8la)\b|اغلى|اعلى سعرا/u.test(normalizedInput)?'premium':/\b(?:cheapest|least expensive|lowest priced|moins cher|ar5as|arkhas)\b|ارخص|اقل سعرا/u.test(normalizedInput)?'cheapest':null;
     const isComparison=plan.lookupKind==='comparison'||(['products','followup'].includes(plan.intent)&&explicitPreference!==null);
     if(isComparison){plan.lookupKind='comparison';if(explicitPreference)plan.pricePreference=explicitPreference;}
+    else if(['products','followup'].includes(plan.intent)&&typeDiscoveryIntent(normalizedInput)&&Array.isArray(plan.queries)&&plan.queries.length)plan.lookupKind='types';
     const direct=directProductReply(plan,lang);
     if(direct)return presentReply(direct,'ai',lang);
     if(isComparison&&plan.intent==='followup'){

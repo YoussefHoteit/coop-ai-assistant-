@@ -13,7 +13,8 @@ const ids=products=>products.map(p=>p.id).sort();
 const stocked=query=>search(query).filter(p=>p.available===true);
 function turn(history,message,reply){
   const card=reply.card;
-  return [...history,{role:'user',content:message},{role:'assistant',content:JSON.stringify({kind:card.kind,comparisonContext:card.comparisonContext,items:card.items.slice(0,12).map(i=>[i.id])})+'\n'+reply.text}];
+  const summary=reply.typeSelection?{kind:'types',queries:reply.typeSelection.queries}:card?{kind:card.kind,comparisonContext:card.comparisonContext,items:card.items.slice(0,12).map(i=>[i.id])}:null;
+  return [...history,{role:'user',content:message},{role:'assistant',content:(summary?JSON.stringify(summary)+'\n':'')+reply.text}];
 }
 
 test('metadata retrieves every mozzarella spelling, independent of customer spelling or punctuation',()=>{
@@ -32,8 +33,12 @@ test('the full reported conversation retains the complete family, not the last s
   globalThis.fetch=async()=>{calls++;throw Error('Inventory lookups must not require generative selection');};
   try{
     let history=[];
+    const question='what types of cheeses do you have';
+    const discovery=await chat(question);
+    assert.equal(discovery.card,null);assert.equal(discovery.products.length,0);assert.ok(discovery.typeSelection);
+    assert.match(discovery.text,/Akkawi.*Mozzarella.*Halloumi.*Feta.*Cheddar/s);assert.match(discovery.text,/Which type are you interested in/);
+    history=turn(history,question,discovery);
     const options=[
-      ['what types of cheeses do you have',stocked('cheeses')],
       ['do you have mozarela or permisan',[...stocked('mozzarella'),...search('parmesan')]],
       ['what other mozzarella options do you have',stocked('mozzarella')],
       ['what is the cheapest mozzarella that you have available',stocked('mozzarella').filter(p=>p.price===1.97)],
@@ -44,10 +49,6 @@ test('the full reported conversation retains the complete family, not the last s
       const result=await chat(message,history);
       assert.equal(result.card?.kind,'products',message);
       assert.deepEqual(ids(result.products),ids(expected),message);
-      if(message.includes('types of')){
-        assert.ok(result.products.length>100);
-        assert.ok(['mozzarella','cheddar','halloumi','feta','akkawi'].every(tag=>result.products.slice(0,24).some(p=>search.taxonomy.records.get(p.id).attributes.includes(tag))), 'first page should represent distinct varieties');
-      }
       history=turn(history,message,result);
     }
     assert.equal(calls,0);
@@ -95,11 +96,47 @@ test('multilingual intent translation uses the same complete classification look
   const original=globalThis.fetch;let calls=0;
   globalThis.fetch=async()=>{calls++;return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({allowed:true,language:calls===1?'ar':'arz',priceOnly:false,request:{intent:'products',queries:['shampoo'],lookupKind:'availability',pricePreference:'standard'}})}]}]});};
   try{
-    for(const [message,language] of [['شو في أنواع شامبو عندكن؟','ar'],['shou anwe3 shampoo 3andkon?','arz'],['Quels types de shampooing avez-vous ?','fr']]){
+    for(const [message,language] of [['شو في شامبو عندكن؟','ar'],['shou fi shampoo 3andkon?','arz'],['Avez-vous du shampooing ?','fr']]){
       const r=await chat(message);
       assert.equal(r.language,language,message);
       assert.deepEqual(ids(r.products),ids(stocked('shampoo')),message);
     }
     assert.equal(calls,2);
+  }finally{globalThis.fetch=original;}
+});
+
+test('type discovery asks for a type before retrieving SKUs and keeps the selected group for comparisons',async()=>{
+  const original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Unexpected provider call');};
+  try{
+    const cases=[
+      {ask:'What types of cheeses do you have?',labels:['Akkawi','Mozzarella','Halloumi','Feta','Cheddar'],choose:'mozarela',expected:stocked('mozzarella')},
+      {ask:'What types of meats do you have?',labels:['Beef','Lamb','Chicken','Turkey','Cold cuts'],choose:'beef',expected:stocked('meat poultry').filter(p=>!search.taxonomy.records.get(p.id).aisles.includes('Cold Cuts')&&/\b(?:beef|cow|boeuf|biftek|faux fillet|entrecote)\b/i.test(p.name.en))},
+      {ask:'What types of mates do you have?',labels:['Beef','Lamb','Chicken'],choose:'chicken',expected:stocked('meat poultry').filter(p=>{const m=search.taxonomy.records.get(p.id);return !m.aisles.includes('Cold Cuts')&&(m.aisles.includes('Chicken')||/\b(?:chicken|poulet|poule|tawook)\b/i.test(p.name.en));})},
+      {ask:'What kinds of rice do you have?',labels:['Basmati','Egyptian','American','Jasmine'],choose:'Basmati',expected:stocked('basmati rice')},
+      {ask:'What types of pasta do you have?',labels:['Spaghetti','Penne','Fettuccine','Lasagna'],choose:'penne',expected:stocked('penne')},
+      {ask:'What types of shampoo do you have?',labels:['Anti-dandruff','Anti-hair-fall','Repair','Baby shampoo'],choose:'baby shampoo',expected:stocked('shampoo').filter(p=>p.category==='baby'||/\b(?:baby|kids)\b/i.test(p.name.en))},
+    ];
+    for(const {ask,labels,choose,expected} of cases){
+      const first=await chat(ask);assert.equal(first.card,null,ask);assert.deepEqual(first.products,[]);assert.ok(first.typeSelection);
+      for(const label of labels)assert.ok(first.text.includes(label),`${ask}: ${label}`);
+      assert.match(first.text,/Which type are you interested in/);
+      let history=turn([],ask,first);
+      const selected=await chat(choose,history);assert.equal(selected.card?.kind,'products',ask+' -> '+choose);assert.deepEqual(ids(selected.products),ids(expected),choose);
+      assert.ok(selected.products.length>0,choose);history=turn(history,choose,selected);
+      const cheapest=await chat('what is the cheapest option',history);assert.ok(cheapest.products.length);assert.ok(cheapest.products.every(p=>p.price===Math.min(...expected.map(p=>p.price))));
+      const all=await chat('List all available options',turn(history,'what is the cheapest option',cheapest));assert.deepEqual(ids(all.products),ids(expected));
+    }
+    const all=await chat('List all available cheeses');assert.deepEqual(ids(all.products),ids(stocked('cheeses')));
+    assert.equal(calls,0);
+  }finally{globalThis.fetch=original;}
+});
+
+test('broad source aisles and multilingual type discovery return no individual products',async()=>{
+  const original=globalThis.fetch;globalThis.fetch=async()=>{throw Error('Unexpected provider call');};
+  try{
+    for(const [ask,lang,word] of [['What categories of beverages do you have?','en','Juices'],['Quels types de fromages avez-vous ?','fr','Mozzarella'],['شو في انواع اجبان عندكن؟','ar','موزاريلا'],['shou anwe3 shampoo 3andkon?','arz','Shampoo']]){
+      const r=await chat(ask);assert.equal(r.language,lang,ask);assert.equal(r.card,null,ask);assert.equal(r.products.length,0,ask);assert.ok(r.text.includes(word),r.text);assert.ok(r.typeSelection);
+      assert.ok(!r.text.includes('Chips & Crackers'));
+    }
   }finally{globalThis.fetch=original;}
 });
