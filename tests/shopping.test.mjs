@@ -28,6 +28,7 @@ test('localized quantities, fractions and multipacks produce the real package co
   assert.equal(packQuantity({amount:'8 large eggs'},{name:{en:'Eggme Brown egg Plast*6'},size:{en:''}}),2);
   assert.equal(packQuantity({amount:'20 eggs'},{name:{en:"Eggs Brown Baladi, 15's"},size:{en:''}}),2);
   assert.equal(packQuantity({amount:'1200 g'},{name:{en:'Pasta 500g*2'},size:{en:'500g'}}),2);
+  assert.equal(packQuantity({amount:'200 g'},{name:{en:"Cheese 6'S 108g"},size:{en:'108g'}}),2);
   assert.equal(packQuantity({amount:'1500 ml'},{name:{en:'Milk 6x200ml'},size:{en:'200ml'}}),2);
   assert.equal(packQuantity({amount:'3 cups',grams:600},{size:{en:'250g'}}),3);
   assert.equal(packQuantity({contributions:{a:'3 cups'},purchaseContributions:{a:'600 g'}},{size:{en:'250g'}}),3);

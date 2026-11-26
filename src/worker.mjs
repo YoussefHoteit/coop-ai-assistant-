@@ -216,6 +216,44 @@ function directProductReply(plan, lang) {
   return {text:[headings[lang],...priceLines].join('\n'),card:{kind:'products',items:selected.map(({product})=>({id:product.id,details:false}))}};
 }
 
+function literalProductReply(input, lang) {
+  const text=normalize(input);
+  const availability=/^(?:do you (?:have|sell|stock)|avez vous|vendez vous|3andkon|3andkun|عندكن|عندكم|هل لديكم|هل عندكم|في عندكم) (.+)$/u;
+  const price=/^(?:what is (?:the )?price of|how much is|price of|quel est le prix de|combien coute|adde se3er|2adde se3er|bkam|كم سعر|شو سعر|قديش سعر) (.+)$/u;
+  const extremes=/^(?:(?:what is |show me |give me |i want )?(?:your |the )?)?(cheapest|lowest priced|most expensive|highest priced) (.+)$/u;
+  const frenchExtremes=/^(?:montrez moi |quel est |quelle est )?(?:le |la |les )?(.+?) (moins cher|moins chere|plus cher|plus chere)$/u;
+  const arabicExtremes=/^(?:بدي |شو |ما هو )?(ارخص|اغلى) (.+)$/u;
+  const arabiziExtremes=/^(?:baddi |badde |shou |shu )?(ar5as|arkhas|aghla) (.+)$/u;
+  const arabiziChoice=/^(?:baddi|badde) (.+?) (?:shou|shu) (ar5as|arkhas|aghla) (?:wahad|wa7ad|we7ed|option)$/u;
+  const unitSuffix=/ (?:per|par|au|bel|lal|لكل|بال) ?(100 g|100 ml|kg|kilo|kilogram|kilogramme|l|litre|liter|unit|piece|unite|كيلو|كغ|لتر|قطعة)$/u;
+  const unitMap={'100 g':'g100','100 ml':'ml100',kg:'kg',kilo:'kg',kilogram:'kg',kilogramme:'kg',l:'litre',litre:'litre',liter:'litre',unit:'piece',piece:'piece',unite:'piece','كيلو':'kg','كغ':'kg','لتر':'litre','قطعة':'piece'};
+  let query,lookupKind,pricePreference='standard',comparisonBasis='pack';
+  const stock=availability.exec(text),listed=price.exec(text);
+  if(stock||listed){query=(stock||listed)[1];lookupKind=stock?'availability':'price';}
+  else{
+    const suffix=unitSuffix.exec(text);
+    const core=suffix?text.slice(0,suffix.index):text;
+    const extreme=extremes.exec(core)||arabicExtremes.exec(core)||arabiziExtremes.exec(core);
+    const reversed=frenchExtremes.exec(core)||arabiziChoice.exec(core);
+    if(!extreme&&!reversed)return null;
+    query=extreme?extreme[2]:reversed[1];
+    const direction=extreme?extreme[1]:reversed[2];
+    lookupKind='comparison';
+    pricePreference=/most expensive|highest priced|plus cher|اغلى|aghla/u.test(direction)?'premium':'cheapest';
+    comparisonBasis=suffix?unitMap[suffix[1]]:'pack';
+  }
+  query=query.replace(/^(?:a|an|the|un|une|des|du|le|la|les) /u,'').trim();
+  if(!query||query.length>120)return null;
+  // Only a complete recognizable product noun or exact product name can skip
+  // interpretation. Misspellings, references and multi-task requests still use AI.
+  const info=productTaxonomy.queryInfo(query);
+  const matches=searchInventory(query);
+  const exact=matches.filter(p=>[p.name.en,p.name.ar,p.id,p.sku].filter(Boolean).some(value=>normalize(value)===query));
+  if(exact.length&&lookupKind!=='comparison')return directProductReply({lookupKind,queries:exact.map(p=>p.id)},lang);
+  if(!info.types.length||!matches.length)return null;
+  return directProductReply({lookupKind,queries:[query],pricePreference,comparisonBasis},lang);
+}
+
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
 const namedPriceQuery = /^(?:how much (?:does|do|is|are)|what(?: s| is) the price|(?:the )?price of|قديش|بكم|كم سعر)(?: |$)/u;
 
@@ -873,6 +911,8 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     if (lastProduct) return presentReply(priceReply([{ id: lastProduct.id }], lang), canUseModel ? 'ai' : 'demo', lang);
   }
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
+  const literal=literalProductReply(input,lang);
+  if(literal)return presentReply(literal,'ai',lang);
   let scopeAllowed = false;
   try {
     const model = configuredModel(env);

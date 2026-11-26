@@ -51,11 +51,29 @@ test('a numerical comparison completes after one model planning call',async()=>{
     return output({allowed:true,language:'en',priceOnly:false,request:{intent:'products',queries:['basmati rice'],englishRequest:'Cheapest basmati rice per kilogram',budgetUsd:null,servings:null,lookupKind:'comparison',comparisonBasis:'kg',pricePreference:'cheapest'}});
   };
   try{
-    const reply=await chat('What is your cheapest basmati rice per kg?');
+    const reply=await chat('Compare the different brands of basmati rice after converting sizes to kilograms.');
     assert.equal(calls,1);
     assert.equal(reply.products[0].name.en,'Taj elegant extra long basmati rice 4kg');
     assert.match(reply.text,/1\.94/);
     assert.equal(reply.card.kind,'products');
+  }finally{globalThis.fetch=original;}
+});
+
+test('complete and unambiguous product requests bypass the provider',async()=>{
+  const original=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=async()=>{calls++;throw Error('The provider is unavailable');};
+  try{
+    const price=await chat('What is the price of Aoun rough salt 900g?');
+    assert.equal(price.text,'$0.75');
+    const stock=await chat('Do you have a car charger?');
+    assert.ok(stock.products.some(product=>product.id==='188331'));
+    const value=await chat('What is your cheapest basmati rice per kg?');
+    assert.equal(value.products[0].name.en,'Taj elegant extra long basmati rice 4kg');
+    const arz=await chat('baddi riz basmati, shou ar5as wahad bel kilo?');
+    assert.equal(arz.language,'arz');
+    assert.equal(arz.products[0].name.en,'Taj elegant extra long basmati rice 4kg');
+    assert.equal(calls,0);
   }finally{globalThis.fetch=original;}
 });
 

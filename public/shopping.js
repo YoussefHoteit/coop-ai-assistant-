@@ -43,8 +43,9 @@ export function productMeasurement(product) {
   const reverse=name.match(/\b(\d+(?:[.,]\d+)?\s*(?:kg|gr|g|ml|cl|l|lb|oz|pcs))\s*[x×*]\s*(\d+)\b/i);
   if(reverse){const size=measurement(reverse[1]);if(size)return {value:size.value*Number(reverse[2]),kind:size.kind};}
   const count=name.match(/\b(\d+)\s*(?:'s|s'|pcs|pieces)\b/i);
-  if(count)return {value:Number(count[1]),kind:'pieces'};
   const size=measurement(product.size?.en||product.size||'');
+  if(size&&['weight','volume'].includes(size.kind))return size;
+  if(count)return {value:Number(count[1]),kind:'pieces'};
   if(/\beggs?\b/i.test(name)){
     const eggCount=name.match(/\*\s*(\d+)\b|\b(\d+)\s*s\b/i);
     if(eggCount)return {value:Number(eggCount[1]||eggCount[2]),kind:'pieces'};

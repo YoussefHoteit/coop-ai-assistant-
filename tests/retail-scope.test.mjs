@@ -66,7 +66,7 @@ test('AI scope review sees every department and the shopping reply can recommend
     }) });
   };
   try {
-    const result = await chat('Do you have a car charger?', { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' });
+    const result = await chat('Can you recommend something to charge my phone while I am driving?', { OPENAI_API_KEY: 'test-key', OPENAI_MODEL: 'test-model' });
     assert.equal(result.mode, 'ai');
     assert.equal(result.products[0].id, '188331');
   } finally { globalThis.fetch = saved; }
