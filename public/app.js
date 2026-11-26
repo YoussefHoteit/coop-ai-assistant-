@@ -449,6 +449,7 @@ function conversationHistory() {
     if (error || (!content && !card)) continue;
     const summary = card && {
       kind: card.kind,
+      ...(card.kind==='products'&&card.comparisonContext&&{comparisonContext:card.comparisonContext}),
       ...(card.kind === 'recipe' && { recipeKey: card.listKey, title: card.title, servings: card.servings }),
       items: card.items.map(item => {
         const product = products.get(item.id);

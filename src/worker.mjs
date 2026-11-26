@@ -189,6 +189,29 @@ function priceReply(items, lang) {
   return { text: text || missing, priceOnly: true, card: items.length ? { kind: 'products', items } : null };
 }
 
+function comparisonContext(queries,items,basis='pack') {
+  return {queries:[...new Set((queries||[]).filter(q=>typeof q==='string'&&q.trim()).map(q=>q.slice(0,120)))].slice(0,12),ids:[...new Set(items.map(item=>item.id).filter(Boolean))].slice(0,20),basis};
+}
+
+function comparisonBasisSuffix(text) {
+  const suffix=/ (?:per|par|au|bel|lal|لكل|بال) ?(100 g|100 ml|kg|kilo|kilogram|kilogramme|l|litre|liter|unit|piece|unite|egg|كيلو|كغ|لتر|قطعة|حبة|بيضة)$/u.exec(text);
+  const units={'100 g':'g100','100 ml':'ml100',kg:'kg',kilo:'kg',kilogram:'kg',kilogramme:'kg',l:'litre',litre:'litre',liter:'litre',unit:'piece',piece:'piece',unite:'piece',egg:'piece','كيلو':'kg','كغ':'kg','لتر':'litre','قطعة':'piece','حبة':'piece','بيضة':'piece'};
+  return {core:suffix?text.slice(0,suffix.index):text,basis:suffix?units[suffix[1]]:null};
+}
+
+function comparisonReply(matches,lang,{basis='pack',preference='cheapest',onlyExtreme=false,context}={}) {
+  const premium=preference==='premium';
+  const rows=rankedPrices(matches,basis,preference);
+  if(!rows.length)return null;
+  const unit={kg:['/ kg','/ كغ','/ kg','/ kg'],g100:['/ 100 g','/ ١٠٠ غ','/ 100 g','/ 100 g'],litre:['/ L','/ لتر','/ L','/ L'],ml100:['/ 100 ml','/ ١٠٠ مل','/ 100 ml','/ 100 ml'],piece:['/ unit','/ قطعة','/ 7abbe','/ unité'],pack:['/ pack','/ عبوة','/ 3elbe','/ article']}[basis]||['','','',''];
+  const languageIndex=['en','ar','arz','fr'].indexOf(lang);
+  const headings={en:premium?'Highest-priced available options:':'Lowest-priced available options:',ar:premium?'أغلى الخيارات المتوفرة:':'أرخص الخيارات المتوفرة:',arz:premium?'Aghla khiyarat mawjoude:':'Ar5as khiyarat mawjoude:',fr:premium?'Options disponibles les plus chères :':'Options disponibles les moins chères :'};
+  const selected=(onlyExtreme?rows.filter(row=>Math.abs(row.value-rows[0].value)<1e-9):rows).slice(0,6);
+  const items=selected.map(({product})=>({id:product.id,details:false}));
+  const priceLines=selected.map(({product,value})=>`${product.name[lang]||product.name.en} · $${value.toFixed(2)} ${unit[languageIndex]}`);
+  return {text:[headings[lang],...priceLines].join('\n'),priceOnly:false,card:{kind:'products',items,comparisonContext:context||comparisonContext([],matches,basis)}};
+}
+
 function directProductReply(plan, lang) {
   if(plan.intent==='recipe'||!['price','availability','comparison'].includes(plan.lookupKind)||!Array.isArray(plan.queries)||!plan.queries.length)return null;
   const groups=plan.queries.slice(0,12).map(query=>typeof query==='string'&&query.trim()?searchInventory(query.slice(0,120)):[]);
@@ -197,23 +220,18 @@ function directProductReply(plan, lang) {
   const matches=[...new Map(groups.flat().map(product=>[product.id,product])).values()];
   if(plan.lookupKind==='price'){
     const items=matches.slice(0,8).map(product=>({id:product.id}));
-    return priceReply(items,lang);
+    const reply=priceReply(items,lang);
+    if(reply.card)reply.card.comparisonContext=comparisonContext(plan.queries,items);
+    return reply;
   }
   if(plan.lookupKind==='availability'){
     const available=matches.filter(product=>product.available===true);
     const selected=[...new Map(groups.flatMap(group=>{const stocked=group.filter(product=>product.available===true);return (stocked.length?stocked:group).slice(0,Math.max(1,Math.floor(8/groups.length)));}).map(product=>[product.id,product])).values()];
-    return {text:available.length?customerMessages[lang].products:customerMessages[lang].soldOut,card:{kind:'products',items:selected.map(product=>({id:product.id,details:false}))}};
+    const items=selected.map(product=>({id:product.id,details:false}));
+    return {text:available.length?customerMessages[lang].products:customerMessages[lang].soldOut,card:{kind:'products',items,comparisonContext:comparisonContext(plan.queries,items)}};
   }
   const basis=plan.comparisonBasis||'pack';
-  const premium=plan.pricePreference==='premium';
-  const rows=rankedPrices(matches,basis,premium?'premium':'cheapest');
-  if(!rows.length)return null;
-  const unit={kg:['/ kg','/ كغ','/ kg','/ kg'],g100:['/ 100 g','/ ١٠٠ غ','/ 100 g','/ 100 g'],litre:['/ L','/ لتر','/ L','/ L'],ml100:['/ 100 ml','/ ١٠٠ مل','/ 100 ml','/ 100 ml'],piece:['/ unit','/ قطعة','/ 7abbe','/ unité'],pack:['/ pack','/ عبوة','/ 3elbe','/ article']}[basis]||['','','',''];
-  const languageIndex=['en','ar','arz','fr'].indexOf(lang);
-  const headings={en:premium?'Highest-priced available options:':'Lowest-priced available options:',ar:premium?'أغلى الخيارات المتوفرة:':'أرخص الخيارات المتوفرة:',arz:premium?'Aghla khiyarat mawjoude:':'Ar5as khiyarat mawjoude:',fr:premium?'Options disponibles les plus chères :':'Options disponibles les moins chères :'};
-  const selected=rows.slice(0,6);
-  const priceLines=selected.map(({product,value})=>`${product.name[lang]||product.name.en} · $${value.toFixed(2)} ${unit[languageIndex]}`);
-  return {text:[headings[lang],...priceLines].join('\n'),card:{kind:'products',items:selected.map(({product})=>({id:product.id,details:false}))}};
+  return comparisonReply(matches,lang,{basis,preference:plan.pricePreference,onlyExtreme:plan.onlyExtreme,context:comparisonContext(plan.queries,matches,basis)});
 }
 
 function literalProductReply(input, lang) {
@@ -225,14 +243,11 @@ function literalProductReply(input, lang) {
   const arabicExtremes=/^(?:بدي |شو |ما هو )?(ارخص|اغلى) (.+)$/u;
   const arabiziExtremes=/^(?:baddi |badde |shou |shu )?(ar5as|arkhas|aghla) (.+)$/u;
   const arabiziChoice=/^(?:baddi|badde) (.+?) (?:shou|shu) (ar5as|arkhas|aghla) (?:wahad|wa7ad|we7ed|option)$/u;
-  const unitSuffix=/ (?:per|par|au|bel|lal|لكل|بال) ?(100 g|100 ml|kg|kilo|kilogram|kilogramme|l|litre|liter|unit|piece|unite|كيلو|كغ|لتر|قطعة)$/u;
-  const unitMap={'100 g':'g100','100 ml':'ml100',kg:'kg',kilo:'kg',kilogram:'kg',kilogramme:'kg',l:'litre',litre:'litre',liter:'litre',unit:'piece',piece:'piece',unite:'piece','كيلو':'kg','كغ':'kg','لتر':'litre','قطعة':'piece'};
   let query,lookupKind,pricePreference='standard',comparisonBasis='pack';
   const stock=availability.exec(text),listed=price.exec(text);
   if(stock||listed){query=(stock||listed)[1];lookupKind=stock?'availability':'price';}
   else{
-    const suffix=unitSuffix.exec(text);
-    const core=suffix?text.slice(0,suffix.index):text;
+    const {core,basis}=comparisonBasisSuffix(text);
     const extreme=extremes.exec(core)||arabicExtremes.exec(core)||arabiziExtremes.exec(core);
     const reversed=frenchExtremes.exec(core)||arabiziChoice.exec(core);
     if(!extreme&&!reversed)return null;
@@ -240,7 +255,7 @@ function literalProductReply(input, lang) {
     const direction=extreme?extreme[1]:reversed[2];
     lookupKind='comparison';
     pricePreference=/most expensive|highest priced|plus cher|اغلى|aghla/u.test(direction)?'premium':'cheapest';
-    comparisonBasis=suffix?unitMap[suffix[1]]:'pack';
+    comparisonBasis=basis||'pack';
   }
   query=query.replace(/^(?:a|an|the|un|une|des|du|le|la|les) /u,'').trim();
   if(!query||query.length>120)return null;
@@ -252,6 +267,69 @@ function literalProductReply(input, lang) {
   if(exact.length&&lookupKind!=='comparison')return directProductReply({lookupKind,queries:exact.map(p=>p.id)},lang);
   if(!info.types.length||!matches.length)return null;
   return directProductReply({lookupKind,queries:[query],pricePreference,comparisonBasis},lang);
+}
+
+function relativePriceIntent(input) {
+  const {core,basis}=comparisonBasisSuffix(normalize(input).replace(/\.+$/,''));
+  const patterns=[
+    ['en',/^(?:and )?(?:(?:what is|what s|which is|which one is|which option is|show me|give me|list|how about|i want) )?(?:the |your )?(cheapest|least expensive|lowest priced|most expensive|highest priced|best value)(?: (?:one|ones|option|options|item|items|product|products|choice|choices))?(?: (?:of|among|out of) (?:these|those|them|the options))?$/],
+    ['ar',/^(?:و )?(?:(?:شو|ما هو|ما هي|اي|اي واحد|اي خيار|بدي|عطيني|ورجيني) )?(?:ال)?(ارخص|اغلى|اقل سعرا|اعلى سعرا)(?: (?:واحد|وحده|خيار|منتج|نوع|شي|الخيارات|منهم|بينهم))?$/u],
+    ['arz',/^(?:w )?(?:(?:shou|shu|baddi|badde|3tine|farjine|aya) )?(ar5as|arkhas|aghla|a8la)(?: (?:wa7ad|we7ed|wahad|option|options|product|shi|minnon|menon))?$/],
+    ['fr',/^(?:et )?(?:(?:quel est|quelle est|lequel est|montrez moi|donnez moi) )?(?:le |la |les |l option la )?(moins cher|moins chere|plus cher|plus chere)(?: (?:produit|option|article|des deux|parmi eux))?$/],
+  ];
+  for(const [language,pattern] of patterns){const match=pattern.exec(core);if(match&&!(match[1]==='best value'&&!basis))return {language,basis,preference:/most expensive|highest priced|اغلى|اعلى|aghla|a8la|plus cher/u.test(match[1])?'premium':'cheapest'};}
+  return null;
+}
+
+function productHistoryGroup(history) {
+  let recent=null;
+  for(let index=history.length-1;index>=0;index--){
+    const message=history[index];
+    if(message.role!=='assistant'||!message.content.startsWith('{'))continue;
+    let card;
+    try{card=JSON.parse(message.content.split('\n',1)[0]);}catch{continue;}
+    if(card.kind==='recipe')return recent;
+    if(card.kind!=='products'||!Array.isArray(card.items))continue;
+    const matches=card.items.map(row=>productsById.get(row?.[0])).filter(Boolean);
+    if(!matches.length)continue;
+    const preceding=history.slice(0,index).findLast(row=>row.role==='user')?.content||'';
+    if(!recent)recent={card,matches,preceding};
+    else if(!matches.some(product=>recent.matches.some(p=>productTaxonomy.records.get(p.id)?.familyKey===productTaxonomy.records.get(product.id)?.familyKey)))return recent;
+    // Older chats did not include comparison context. Walk back through relative
+    // comparisons to the original choice list, without crossing another recipe.
+    if(card.comparisonContext||!relativePriceIntent(preceding))return{card,matches,preceding};
+  }
+  return recent;
+}
+
+function contextualPriceReply(input,history,interpretedIntent=null) {
+  const intent=relativePriceIntent(input)||interpretedIntent;
+  if(!intent)return null;
+  const group=productHistoryGroup(history);
+  if(!group)return null;
+  const saved=group.card.comparisonContext;
+  const queries=Array.isArray(saved?.queries)?saved.queries.filter(q=>typeof q==='string').slice(0,12):[];
+  // Recover a broad, recognizable product query from a pre-upgrade chat.
+  if(!queries.length){
+    const question=normalize(group.preceding);
+    const terms=question.match(/^(?:what|which) (?:options|choices|brands|types|varieties|sizes) (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|offer) (?:for|of) (.+)$/)?.[1]||
+      question.match(/^(?:what|which) (.+?) (?:options|choices|brands|types|varieties|sizes) (?:do|does) (?:you|they|coop|al makhazen) (?:have|sell|offer)$/)?.[1];
+    if(terms&&productTaxonomy.queryInfo(terms).types.length)queries.push(terms);
+    else for(const term of shoppingLookupQueries(group.preceding))if(productTaxonomy.queryInfo(term).types.length)queries.push(term);
+  }
+  const full=queries.flatMap(query=>searchInventory(query.slice(0,120)));
+  const shownIds=new Set(group.matches.map(product=>product.id));
+  const explicitlyShown=/\b(?:among|out of|of) (?:these|those|them|the options)\b|منهم|بينهم|parmi eux|minnon|menon/i.test(input);
+  const pool=!explicitlyShown&&full.some(product=>shownIds.has(product.id))?[...new Map(full.map(product=>[product.id,product])).values()]:group.matches;
+  const basis=intent.basis||(['pack','kg','g100','litre','ml100','piece'].includes(saved?.basis)?saved.basis:'pack');
+  const context=comparisonContext(pool===group.matches?[]:queries,pool,basis);
+  // If the prior card came from an explicit set, carry all original IDs through
+  // a cheapest-to-most-expensive turn rather than shrinking to the winner.
+  if(pool===group.matches&&!explicitlyShown&&Array.isArray(saved?.ids)){
+    const prior=saved.ids.slice(0,20).map(id=>productsById.get(id)).filter(Boolean);
+    if(prior.some(product=>shownIds.has(product.id)))return comparisonReply(prior,intent.language,{basis,preference:intent.preference,onlyExtreme:true,context:comparisonContext([],prior,basis)});
+  }
+  return comparisonReply(pool,intent.language,{basis,preference:intent.preference,onlyExtreme:true,context});
 }
 
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
@@ -388,6 +466,7 @@ function demoReply(input, lang, context) {
 }
 
 const scopeRules = [
+  'Choosing the cheapest, most expensive, lowest-priced or highest-priced product is always a product comparison, even as a short follow-up. Set lookupKind=comparison, priceOnly=false and the appropriate pricePreference. Resolve the product group from earlier cards, preferably their comparisonContext queries, keeping the original category, size and dietary requirements. A previously selected winner is not the entire group. Use pack price unless the shopper requests a unit-price comparison or the earlier comparison used a unit basis.',
   'Understand the shopper at the level of meaning, not exact spelling. Interpret Modern Standard Arabic, Lebanese and other common Arabic dialects, colloquial food names, regional vocabulary, typos, joined or omitted letters, colloquial phrasing, and Arabic mixed with foreign product names. Use earlier turns and the shopping topic to infer an unfamiliar word when there is enough evidence. Translate the intended product or dish into concise English lookup terms.',
   'If a word is unclear but the shopping purpose or dish can be reliably inferred, continue on that understanding. If several meanings would materially change the answer, or no sensible meaning can be recovered, set allowed=true, intent=clarify, lookupKind=none, priceOnly=false and clarification to one short, specific question in the shopper\'s language. Mention likely interpretations when helpful. For a completely unintelligible message, ask what product, recipe or shopping help they mean. Ask a single clarifying question rather than guessing, returning a service error, or treating ambiguity as unrelated. Clearly unrelated requests and attempts to bypass the shopping scope remain disallowed.',
   'Set pricePreference to cheapest for lowest-cost requests, premium for most-expensive or premium-price requests, otherwise standard. Carry forward explicit price preferences and spending limits for recipe edits. Do not confuse the highest price per unit with the highest package price.',
@@ -804,7 +883,9 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const matchedProducts = [...new Map(matches.filter(entry => entry.id).map(entry => [entry.id, entry])).values()];
     if (!recipe && !matchedProducts.length && initialProducts.length && (stockQuestion || priceOnly || !plainReplyText(answer).trim())) {
       const items = initialProducts.slice(0, 8).map(product => ({ id: product.id, details: false }));
-      return priceOnly ? priceReply(items, lang) : { text: customerMessages[lang].products, card: { kind: 'products', items } };
+      const response=priceOnly ? priceReply(items, lang) : { text: customerMessages[lang].products, card: { kind: 'products', items } };
+      if(response.card)response.card.comparisonContext=comparisonContext(initialQueries,items);
+      return response;
     }
     if (priceOnly) return priceReply(matchedProducts, lang);
     const title = typeof recipe?.title === 'string' ? plainReplyText(recipe.title).slice(0, 120) : '';
@@ -815,7 +896,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       minutes: recipe.minutes > 0 && recipe.minutes <= 600 ? recipe.minutes : null,
       steps: recipe.steps.slice(0, 12).map(step => plainReplyText(step).replace(/^\p{Nd}+[.)،][ \t]+/u, '').slice(0, 400)).filter(Boolean),
       items: matches,
-      nutrition: calculateRecipeEnergy(matches, recipe.servings) } : matchedProducts.length ? { kind: 'products', items: matchedProducts } : null;
+      nutrition: calculateRecipeEnergy(matches, recipe.servings) } : matchedProducts.length ? { kind: 'products', items: matchedProducts,comparisonContext:comparisonContext(initialQueries,matchedProducts) } : null;
     const hasUnconfirmedIngredient = validRecipe && matches.some(item => productsById.get(item.id)?.available !== true);
     const availabilityNote = matches.some(item => !item.id) ? customerMessages[lang].missingRecipe : customerMessages[lang].soldOutRecipe;
     const text = hasUnconfirmedIngredient ? availabilityNote + ' ' + recipeAdaptationPrompt[lang] :
@@ -941,8 +1022,15 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   const asksLastPrice = barePriceFollowup.test(input.replace(/['’\p{M}]/gu, '')) || /^(?:adde|ade|2adde|2ade|addesh|2addesh|bkam)(?:\s+(?:se3ro|se3ra|ha2o|7a2o|ha2a|7a2a|hayda|hayde))?\s*[?!.,]*$/i.test(input) || /^(?:combien(?: (?:ca coute|coute t il|coute t elle|coute ce produit))?|quel est (?:son|le) prix|c est combien)$/u.test(normalize(input));
   if (asksLastPrice) {
     const lastProduct = lastSingleProduct(history);
-    if (lastProduct) return presentReply(priceReply([{ id: lastProduct.id }], lang), canUseModel ? 'ai' : 'demo', lang);
+    if (lastProduct) {
+      const reply=priceReply([{id:lastProduct.id}],lang);
+      const prior=productHistoryGroup(history)?.card.comparisonContext;
+      if(prior&&reply.card)reply.card.comparisonContext=prior;
+      return presentReply(reply,canUseModel?'ai':'demo',lang);
+    }
   }
+  const contextual=contextualPriceReply(input,history);
+  if(contextual)return presentReply(contextual,canUseModel?'ai':'demo',relativePriceIntent(input).language);
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
   const literal=literalProductReply(input,lang);
   if(literal)return presentReply(literal,'ai',lang);
@@ -956,10 +1044,19 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     scopeAllowed = true;
     if(decision.request?.intent==='clarify')return clarification(decision.request.clarification);
     stage = 'reply';
-    const direct=directProductReply(decision.request||{},lang);
+    const plan=decision.request||{};
+    const normalizedInput=normalize(input);
+    const explicitPreference=/\b(?:most expensive|highest priced|plus cher|aghla|a8la)\b|اغلى|اعلى سعرا/u.test(normalizedInput)?'premium':/\b(?:cheapest|least expensive|lowest priced|moins cher|ar5as|arkhas)\b|ارخص|اقل سعرا/u.test(normalizedInput)?'cheapest':null;
+    const isComparison=plan.lookupKind==='comparison'||(['products','followup'].includes(plan.intent)&&explicitPreference!==null);
+    if(isComparison){plan.lookupKind='comparison';if(explicitPreference)plan.pricePreference=explicitPreference;}
+    const direct=directProductReply(plan,lang);
     if(direct)return presentReply(direct,'ai',lang);
-    const priceOnly = decision.priceOnly || asksLastPrice;
-    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish, decision.request), 'ai', lang);
+    if(isComparison&&plan.intent==='followup'){
+      const fromHistory=contextualPriceReply(input,history,{language:lang,basis:plan.comparisonBasis,preference:plan.pricePreference==='premium'?'premium':'cheapest'});
+      if(fromHistory)return presentReply(fromHistory,'ai',lang);
+    }
+    const priceOnly = !isComparison&&(decision.priceOnly || asksLastPrice);
+    return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish, plan), 'ai', lang);
   } catch (error) {
     if (requestSignal.aborted) return null;
     const errorCode = /^[a-z_]+$/.test(error?.code || '') ? error.code :

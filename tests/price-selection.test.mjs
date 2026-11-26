@@ -77,6 +77,73 @@ test('complete and unambiguous product requests bypass the provider',async()=>{
   }finally{globalThis.fetch=original;}
 });
 
+function historyTurn(history,message,reply){
+  const products=new Map(reply.products.map(product=>[product.id,product]));
+  const card=reply.card;
+  return [...history,{role:'user',content:message},{role:'assistant',content:[card&&JSON.stringify({kind:card.kind,comparisonContext:card.comparisonContext,items:card.items.map(item=>[item.id,products.get(item.id)?.name.en,item.amount])}),reply.text].filter(Boolean).join('\n')}];
+}
+
+test('contextual cheapest and most expensive results keep the entire original product search and clickable cards',async()=>{
+  const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;throw Error('Direct contextual comparison should not use the provider');};
+  try{
+    for(const query of ['eggs','unsalted butter','basmati rice','whole wheat pasta','pencils']){
+      const question='Do you have '+query+'?';
+      const first=await chat(question);
+      assert.ok(first.card?.comparisonContext?.queries.length,query);
+      let history=historyTurn([],question,first);
+      const stocked=inventory.search(query).filter(p=>p.available===true&&Number.isFinite(p.price));
+      assert.ok(stocked.length,query);
+      const min=Math.min(...stocked.map(p=>p.price)),max=Math.max(...stocked.map(p=>p.price));
+      for(const [message,expected] of [['what is the cheapest option',min],['what is the most expensive option',max],['cheapest one',min]]){
+        const reply=await chat(message,history);
+        assert.equal(reply.priceOnly,false,message+' '+query);
+        assert.equal(reply.card?.kind,'products');assert.ok(reply.products.length);
+        assert.ok(reply.products.every(p=>p.price===expected&&p.available===true),query+' '+message+' '+expected);
+        assert.deepEqual(reply.card.comparisonContext.queries,first.card.comparisonContext.queries);
+        history=historyTurn(history,message,reply);
+      }
+    }
+    assert.equal(calls,0);
+  }finally{globalThis.fetch=original;}
+});
+
+test('legacy chats and multilingual follow-ups recover the product group, not the last winner',async()=>{
+  const options=inventory.search('eggs').filter(p=>p.available===true);
+  const highest=options.reduce((a,b)=>a.price>b.price?a:b);
+  const history=[{role:'user',content:'What options do they have for eggs?'},{role:'assistant',content:JSON.stringify({kind:'products',items:options.slice(0,8).map(p=>[p.id,p.name.en])})},{role:'user',content:'what is the most expensive option'},{role:'assistant',content:JSON.stringify({kind:'products',items:[[highest.id,highest.name.en]]})}];
+  const minimum=Math.min(...options.map(product=>product.price));
+  for(const [message,language] of [['شو أرخص خيار؟','ar'],['shou ar5as wa7ad?','arz'],['Quel est le moins cher ?','fr']]){
+    const reply=await chat(message,history);
+    assert.equal(reply.language,language);assert.equal(reply.priceOnly,false);assert.ok(reply.products.length);
+    assert.ok(reply.products.every(product=>product.price===minimum));
+  }
+});
+
+test('unit-price follow-ups preserve the comparison basis and genuine price-only questions remain text-only',async()=>{
+  const message='What is your cheapest basmati rice per kg?';
+  const first=await chat(message);const history=historyTurn([],message,first);
+  const highest=await chat('what is the most expensive option',history);
+  const expected=rankedPrices(inventory.search('basmati rice'),'kg','premium')[0];
+  assert.equal(highest.products[0].id,expected.product.id);assert.equal(highest.card.comparisonContext.basis,'kg');
+  assert.equal(highest.priceOnly,false);
+  const single=await chat('How much is it?',historyTurn(history,'what is the most expensive option',highest));
+  if(highest.products.length===1){assert.equal(single.priceOnly,true);assert.equal(single.text,'$'+highest.products[0].price.toFixed(2));}
+});
+
+test('a comparison incorrectly classified as a price lookup still returns an interactive card',async()=>{
+  const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async(_url,options)=>{
+    calls++;assert.equal(JSON.parse(options.body).text.format.name,'shopping_scope');
+    return output({allowed:true,language:'en',priceOnly:true,request:{intent:'followup',queries:['unsalted butter'],pricePreference:'standard',lookupKind:'price',comparisonBasis:'pack'}});
+  };
+  try{
+    const reply=await chat('Can you tell me which is the least expensive one?');
+    assert.equal(calls,1);assert.equal(reply.priceOnly,false);assert.equal(reply.card.kind,'products');assert.ok(reply.products.length);
+    assert.equal(reply.products[0].price,1.65);
+  }finally{globalThis.fetch=original;}
+});
+
 test('serving-count revisions are validated before returning a shopping card',async()=>{
   const original=globalThis.fetch;
   let drafts=0;
