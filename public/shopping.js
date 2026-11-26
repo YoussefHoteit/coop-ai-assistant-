@@ -11,10 +11,10 @@ export function measurement(value) {
   const units = [
     ['weight', 1000, /^(?:kg|kilos?|kilograms?|kilogrammes?|كغ|كجم|كيلو(?:غرام)?)(?!\p{L})/u],
     ['weight', 1, /^(?:g|gr|grams?|grammes?|غ|غرام|جرام)(?!\p{L})/u],
-    ['weight', 453.59237, /^(?:lbs?|pounds?|livres?)(?!\p{L})/u],
-    ['weight', 28.349523125, /^(?:oz|ounces?)(?!\p{L})/u],
+    ['weight', 453.59237, /^(?:lbs?|pounds?|livres?|رطل)(?!\p{L})/u],
+    ['weight', 28.349523125, /^(?:oz|ounces?|أونصة)(?!\p{L})/u],
     ['volume', 1000, /^(?:l|liters?|litres?|لتر|ليتر)(?!\p{L})/u],
-    ['volume', 10, /^(?:cl|centilitres?)(?!\p{L})/u],
+    ['volume', 10, /^(?:cl|centilitres?|سل)(?!\p{L})/u],
     ['volume', 1, /^(?:ml|millilitres?|milliliters?|مل|ملل)(?!\p{L})/u],
     ['pieces', 1, /^(?:(?:large|small|medium|fresh|gros|petits?)\s+)?(?:pcs|pieces?|pièces?|eggs?|œufs?|oeufs?|بيض(?:ات)?|حبات?|قطع|وحدات?)(?!\p{L})/u],
     ['packs', 1, /^(?:packs?|packets?|cans?|cartons?|bottles?|bags?|briques?|boîtes?|sachets?|paquets?|bouteilles?|علب|علبة|عبوات?|أكياس|كيس|قنينة|3elab|3elbe)(?!\p{L})/u],

@@ -51,12 +51,17 @@ test('canonical request planning supplies ingredients on the first request in al
  try{for(const[message,language,englishRequest,queries,title,step]of fixtures){let calls=0;globalThis.fetch=async(_url,options)=>{
    const body=JSON.parse(options.body);calls++;
    if(body.text.format.name==='shopping_scope')return Response.json({output:output({allowed:true,language,priceOnly:false,request:{intent:'recipe',englishRequest,queries}})});
+   if(body.text.format.name==='shopping_prose'){
+     const ar={lentils:'عدس',rice:'أرز',onions:'بصل','olive oil':'زيت زيتون',salt:'ملح',molokhia:'ملوخية','dried coriander':'كزبرة مجففة',garlic:'ثوم',chicken:'دجاج'};
+     const fr={carrot:'Carottes',onions:'Oignons',potatoes:'Pommes de terre'};
+     return Response.json({output:output({texts:JSON.parse(body.input[0].content).requiredTexts.map(row=>({key:row.key,text:(language==='ar'?ar:fr)[queries[Number(row.key.split(':')[1])]]}))})});
+   }
    const context=JSON.parse(body.input[0].content);assert.equal(context.message,message);assert.equal(context.interpretedRequest,englishRequest);assert.ok(context.serverProductMatches.length>=queries.length-1);
    for(const group of context.serverProductMatches)assert.ok(group.results.every(p=>p.classification&&p.sourceKind==='catalog'));
    const reply={inScope:true,recipe:{title,servings:4,minutes:30,steps:[step],revisesRecipe:null},items:queries.map(query=>({id:null,name:query,catalogQuery:query,amount:'100 g',grams:100})),showNutrition:false,answer:''};
    return Response.json({output:output(reply)});
   };
-  const reply=await(await worker.fetch(post(message),env)).json();assert.equal(reply.mode,'ai',message);assert.equal(reply.language,language);assert.equal(reply.card.kind,'recipe');assert.ok(reply.card.items.every(i=>i.id),message);assert.equal(reply.error,undefined);assert.equal(calls,2);
+  const reply=await(await worker.fetch(post(message),env)).json();assert.equal(reply.mode,'ai',message);assert.equal(reply.language,language);assert.equal(reply.card.kind,'recipe');assert.ok(reply.card.items.every(i=>i.id),message);assert.equal(reply.error,undefined);assert.equal(calls,['ar','fr'].includes(language)?3:2);
  }}finally{globalThis.fetch=previous;}
 });
 test('incomplete output and malformed JSON are repaired within the same user request',async()=>{

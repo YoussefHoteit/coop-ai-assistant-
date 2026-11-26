@@ -9,7 +9,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   define('beans','beans|haricot|fassoulia|fasolia|فاصوليا',staples,'soup|coffee|cacao|cocoa|green bean');
   define('fava beans','fava|broad beans|foul|foul medammas|فول',staples,'soup|chips');
   define('rice','rice|riz|rezz|rez|أرز|ارز|رز',staples,'chips|cake|flour|pudding|marinade|spice|mix');
-  define('bulgur','bulgur|burghol|borghol|boulgour|برغل',staples);
+  define('bulgur','bulgur|burghol|borghol|borgol|burghul|boulgour|bourghoul|برغل|البرغل',staples);
   define('freekeh','freekeh|freekah|frikeh|فريكة',staples);
   define('quinoa','quinoa|كينوا',staples);
   define('oats','oats|oat|avoine|شوفان',staples,'milk|bar|biscuit|cookie|drink');

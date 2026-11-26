@@ -1,5 +1,5 @@
 import { packQuantity, basketSummary, groupShoppingEntries, shoppingCopy, purchaseAmount } from './shopping.js';
-import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
+import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale, recipeIngredientLanguage, recipeSlotUsesCorrectLanguage, arabicRecipeUnits } from './language.js';
 import { customerCopy } from './customer-copy.js';
 import { createProductPreviews } from './product-preview.js';
 
@@ -106,7 +106,7 @@ let dialogKind;
 const getText = (key, language = lang) => (copy[language] || copy.en)[key];
 const inventoryNote = () => getText(['approved', 'screenshot'].includes(catalog?.inventoryMode) ? catalog.inventoryMode : 'sample');
 const localizedNumber = (number, language = lang) => new Intl.NumberFormat(replyLocale(language)).format(number);
-const price = (amount, language = lang) => new Intl.NumberFormat(replyLocale(language), { style: 'currency', currency: 'USD' }).format(amount);
+const price = (amount, language = lang) => language==='ar' ? new Intl.NumberFormat('ar-LB',{minimumFractionDigits:2,maximumFractionDigits:2}).format(amount)+' دولار' : new Intl.NumberFormat(replyLocale(language), { style: 'currency', currency: 'USD' }).format(amount);
 
 function element(tag, className = '', text) {
   const node = document.createElement(tag);
@@ -191,7 +191,8 @@ function productDetails(product, language = lang, amount = '') {
     : product.available === false ? (sample ? 'unavailable' : 'outOfStock') : 'unknown';
   const size = product.size[language] || product.size.en;
   const sameSize = amount && size && quantityKey(amount) === quantityKey(size);
-  return [amount, sameSize ? '' : formatPackSize(size, language), Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
+  const formattedSize=formatPackSize(size,language);
+  return [language==='ar'?arabicRecipeUnits(amount):amount, sameSize ? '' : formattedSize, Number.isFinite(product.price) ? price(product.price, language) : '', getText(status, language),
     product.promotion ? getText('promotion', language) : ''].filter(Boolean).join(' · ');
 }
 
@@ -200,8 +201,9 @@ function formatPackSize(size, language) {
   if (!size || language !== 'ar') return size;
   const units = { pieces: 'قطعة', piece: 'قطعة', pcs: 'قطعة', packs: 'عبوة', pack: 'عبوة',
     g: 'غ', gr: 'غ', kg: 'كغ', ml: 'مل', cl: 'سل', l: 'ل', lb: 'رطل', oz: 'أونصة' };
-  return size.replace(/(\d+(?:\.\d+)?)\s*(pieces?|pcs|packs?|kg|gr?|ml|cl|l|lb|oz)\b/gi,
+  const localized=size.replace(/(\d+(?:\.\d+)?)\s*(pieces?|pcs|packs?|kg|gr?|ml|cl|l|lb|oz)\b/gi,
     (_, number, unit) => localizedNumber(Number(number), language) + ' ' + units[unit.toLowerCase()]).replace(/,\s+/g, '، ');
+  return /\p{Script=Latin}/u.test(localized) ? '' : localized;
 }
 
 function nutritionInfo(product, item, language) {
@@ -227,6 +229,8 @@ function nutritionInfo(product, item, language) {
 
 function renderCard(card, language) {
   const recipe = card.kind === 'recipe';
+  const ingredientLanguage = recipe ? recipeIngredientLanguage(language) : language;
+  const ingredientText = key => getText(key,ingredientLanguage);
   const t = key => getText(key, language);
   const number = value => localizedNumber(value, language);
   const cardNode = element('section', 'result-card');
@@ -248,28 +252,32 @@ function renderCard(card, language) {
   for (const item of card.items) {
     const product = products.get(item.id);
     const row = element('div', 'product-row');
+    row.lang=ingredientLanguage==='arz'?'ar-Latn-LB':ingredientLanguage;
+    row.dir=ingredientLanguage==='ar'?'rtl':'ltr';
     const details = element('div', 'copyable-text');
     if (!product) {
       if (!recipe || !item.name) continue;
-      details.append(element('strong', '', item.name), element('small', '', [item.amount, t('noIngredient')].filter(Boolean).join(' · ')));
+      details.append(element('strong', '', item.name), element('small', '', [item.amount, ingredientText('noIngredient')].filter(Boolean).join(' · ')));
       row.append(details);
       cardNode.append(row);
       continue;
     }
-    const name = (language === 'fr' || (language === 'arz' && recipe)) && item.name ? item.name : product.name[language] || product.name.en;
+    const localizedName=item.name&&recipeSlotUsesCorrectLanguage('name:0',item.name,language)?item.name:null;
+    const sourceName=product.name[ingredientLanguage]||product.name.en;
+    const name=recipe ? (localizedName||(ingredientLanguage==='ar'&&/\p{Script=Latin}/u.test(sourceName)?'مكوّن الوصفة':sourceName)) : (language==='fr'&&item.name?item.name:product.name[language]||product.name.en);
     details.append(element('strong', '', name));
-    details.append(element('small', '', productDetails(product, language, item.amount)));
-    if (recipe && packQuantity(item, product)>1) details.append(element('small','',localizedNumber(packQuantity(item,product),language)+' '+getText('packs',language)));
-    if (product.description?.[language] && (!recipe || product.sourceKind === 'screenshot')) {
-      details.append(element('small', '', product.description[language]));
+    details.append(element('small', '', productDetails(product, ingredientLanguage, item.amount)));
+    if (recipe && packQuantity(item, product)>1) details.append(element('small','',localizedNumber(packQuantity(item,product),ingredientLanguage)+' '+ingredientText('packs')));
+    if (product.description?.[ingredientLanguage] && (!recipe || product.sourceKind === 'screenshot'&&recipeSlotUsesCorrectLanguage('name:0',product.description[ingredientLanguage],language))) {
+      details.append(element('small', '', product.description[ingredientLanguage]));
     }
-    const nutrition = nutritionInfo(product, item, language);
+    const nutrition = nutritionInfo(product, item, ingredientLanguage);
     if (nutrition) details.append(nutrition);
     const alreadyAdded = list.get(item.id)?.contributions?.[card.listKey] === (item.amount || '1 pack');
-    const add = button('add-button', t(alreadyAdded ? 'onList' : 'add') + ' ' + name, alreadyAdded ? 'check' : 'plus',
+    const add = button('add-button', ingredientText(alreadyAdded ? 'onList' : 'add') + ' ' + name, alreadyAdded ? 'check' : 'plus',
       () => addToList(card.listKey, [item], language, false, add), true);
     add.disabled = product.available === false;
-    row.append(productPhoto(product), details, add);
+    row.append(productPhoto(recipe?{...product,name}:product), details, add);
     cardNode.append(row);
     if (product.available !== false) addable.push(item);
   }
@@ -284,7 +292,7 @@ function renderCard(card, language) {
 
   if (addable.length > 1 || (recipe && addable.length === 1)) {
     const footer = element('div', 'card-footer');
-    footer.append(button('primary', t(recipe ? 'all' : 'allProducts'), 'plus',
+    footer.append(button('primary', ingredientText(recipe ? 'all' : 'allProducts'), 'plus',
       event => addToList(card.listKey, addable, language, recipe, event.currentTarget)));
     if (recipe) intro.after(footer);
     else cardNode.append(footer);
@@ -595,7 +603,8 @@ function renderList() {
     section.append(element('h3','group-title',label ? getText(label) : group.label));
     for (const item of group.items) {
       const product = products.get(item.id) || item;
-      const name = product.name?.[lang] || product.name?.en || item.id;
+      const rowLanguage=Object.values(item.groups||{}).some(g=>g.kind==='recipe')?recipeIngredientLanguage(lang):lang;
+      const name = item.displayNames?.[rowLanguage] || product.name?.[rowLanguage] || product.name?.en || item.id;
       const row = element('article','list-item' + (item.checked ? ' checked' : ''));
       const description = element('div','list-description copyable-text');
       const checkLabel = element('label','item-check'); const check = element('input'); check.type = 'checkbox'; check.checked = !!item.checked;
@@ -603,15 +612,15 @@ function renderList() {
       check.addEventListener('change',()=>{item.checked=check.checked; saveList(); row.classList.toggle('checked',item.checked);});
       checkLabel.append(check,element('strong','',name)); description.append(checkLabel);
       const quantity = packQuantity(item, product);
-      description.append(element('small','',[(product.size?.[lang] || product.size?.en),Number.isFinite(product.price) ? price(product.price) : '',product.available === false ? getText('outOfStock') : ''].filter(Boolean).join(' · ')));
-      if (Object.values(item.groups||{}).some(g=>g.kind==='recipe')) description.append(element('small','recipe-needed',getText('needed') + ': ' + totalAmounts(Object.values(item.contributions||{}),lang)));
+      description.append(element('small','',[formatPackSize(product.size?.[rowLanguage]||product.size?.en,rowLanguage),Number.isFinite(product.price) ? price(product.price,rowLanguage) : '',product.available === false ? getText('outOfStock',rowLanguage) : ''].filter(Boolean).join(' · ')));
+      if (Object.values(item.groups||{}).some(g=>g.kind==='recipe')) description.append(element('small','recipe-needed',getText('needed',rowLanguage) + ': ' + totalAmounts(Object.values(item.contributions||{}),rowLanguage)));
       const controls = element('div','item-controls'); const stepper = element('div','quantity-stepper'); stepper.setAttribute('role','group'); stepper.setAttribute('aria-label',getText('quantity') + ': ' + name);
       const change = delta => updateList(()=>{item.quantity = Math.max(1,Math.min(99,quantity+delta));},getText('updated'));
       const less=button('icon-button',getText('quantity')+' − '+name,'minus',()=>change(-1),true); less.disabled=quantity<=1;
       const more=button('icon-button',getText('quantity')+' + '+name,'plus',()=>change(1),true); more.disabled=quantity>=99;
       stepper.append(less,element('span','',localizedNumber(quantity)),more);
       controls.append(stepper,button('remove-button',getText('remove')+' '+name,'close',()=>updateList(()=>list.delete(item.id),getText('removed')),true));
-      row.append(productPhoto(product),description,controls); section.append(row);
+      row.append(productPhoto({...product,name}),description,controls); section.append(row);
     }
     sections.push(section);
   }
@@ -699,11 +708,14 @@ function addToList(key, items, language, replaceRecipe = false, source) {
   const card = chat.findLast(message => message.card?.listKey === key)?.card;
   const amounts = new Map();
   const purchases = new Map();
+  const names = new Map();
+  const rowLanguage=card?.kind==='recipe'?recipeIngredientLanguage(language):language;
   for (const item of items) {
     const product = products.get(item.id);
     if (product && product.available !== false) {
       amounts.set(item.id, [amounts.get(item.id),item.amount||'1 pack'].filter(Boolean).join(' + '));
       purchases.set(item.id,[purchases.get(item.id),purchaseAmount(item,product)].filter(Boolean).join(' + '));
+      if(card?.kind==='recipe'&&item.name)names.set(item.id,item.name);
     }
   }
   const affected = new Set(amounts.keys());
@@ -718,7 +730,9 @@ function addToList(key, items, language, replaceRecipe = false, source) {
     const contributions = { ...(previous?.contributions ?? (previous ? { legacy: previous.amount || '1 pack' } : {})) };
     const purchaseContributions = { ...previous?.purchaseContributions };
     const amount = amounts.get(id);
-    if (contributions[key] === amount && (!amount || purchaseContributions[key]===purchases.get(id))) continue;
+    const displayNames={...previous?.displayNames};
+    if (contributions[key] === amount && (!amount || purchaseContributions[key]===purchases.get(id))&&(!names.has(id)||displayNames[rowLanguage]===names.get(id))) continue;
+    if(names.has(id))displayNames[rowLanguage]=names.get(id);
     if (amount) contributions[key] = amount;
     else delete contributions[key];
     if (amount) purchaseContributions[key]=purchases.get(id);
@@ -728,7 +742,7 @@ function addToList(key, items, language, replaceRecipe = false, source) {
     if (amount && card) groups[key] = { title: card.title || getText('allGroup'), kind: card.kind };
     else if (!amount) delete groups[key];
     const product = products.get(id) || previous;
-    if (values.length) list.set(id, { id, name: product.name, price: product.price, size: product.size, available: product.available, imageUrl: product.imageUrl, category: product.category, groups, contributions, purchaseContributions,
+    if (values.length) list.set(id, { id, name: product.name, displayNames, price: product.price, size: product.size, available: product.available, imageUrl: product.imageUrl, category: product.category, groups, contributions, purchaseContributions,
       amount: totalAmounts(values, 'en'), checked: false });
     else list.delete(id);
     changed = true;

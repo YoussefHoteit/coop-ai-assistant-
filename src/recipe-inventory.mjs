@@ -34,7 +34,7 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     { key: 'chickpeas', terms: ['chickpeas', 'chickpea', 'pois chiches', 'حمص', '7ommos'],
       accepts: p => category(p, 'pantry') && named(p, /chickpea|pois chiche/) && !named(p, /soup|chips|flour/), queries: ['chickpeas'] },
     { key: 'tahini', terms: ['tahini', 'tahina', 't7ine', 'طحينة'], accepts: p => category(p, 'pantry') && named(p, /tahin/), queries: ['tahini'] },
-    { key: 'bulgur', terms: ['bulgur', 'burghol', 'boulgour', 'برغل'], accepts: p => category(p, 'pantry') && named(p, /bulgur|burghol|boulgour/), queries: ['bulgur'] },
+    { key: 'bulgur', terms: ['bulgur', 'burghol', 'borghol', 'borgol', 'burghul', 'boulgour', 'bourghoul', 'برغل', 'البرغل'], accepts: p => category(p, 'pantry') && named(p, /bulgur|burghol|borghol|borgol|burghul|boulgour|bourghoul/), queries: ['bulgur'] },
     { key: 'pita', terms: ['pita', 'pita bread', 'arabic bread', 'pain pita', 'khebez 3arabe', 'خبز عربي'],
       accepts: p => category(p, 'bakery') && named(p, /pita|arabic|arabe/), queries: ['arabic bread', 'pita'] },
     ...[

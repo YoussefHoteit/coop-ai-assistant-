@@ -42,7 +42,7 @@ export function chooseReplyLanguage(text, recentLanguage, classifiedLanguage) {
   if(explicit)return explicit;
   const detected = detectReplyLanguage(text, recentLanguage);
   if (/^merci[.!\s]*$/i.test(text)) return detected;
-  if (isArabizi(text) || (arabicScript.test(text) && !latinScript.test(text))) return detected;
+  if (isArabizi(text) || arabicScript.test(text)) return detected;
   if (!arabicScript.test(text) && isFrench(text)) return 'fr';
   if (!arabicScript.test(text) && /\b(?:how|what|which|can|could|please|recommend|recipe|ingredients|price|write|give|need|help|show|cook|make)\b/i.test(text) && !isArabizi(text)) return 'en';
   return replyLanguages.includes(classifiedLanguage) ? classifiedLanguage : detected;
@@ -66,6 +66,41 @@ export function replyUsesCorrectScript(reply, language) {
   }
   const main = [reply.answer, reply.recipe?.title, ...(reply.recipe?.steps || [])].filter(Boolean).join(' ');
   return !latinScript.test(main) || arabicScript.test(main);
+}
+
+// Ingredient rows are written in a standard readable language. The surrounding
+// conversation, recipe title and cooking instructions keep the shopper's language.
+export const recipeIngredientLanguage = language => language === 'arz' ? 'en' : language;
+
+export function recipeSlotLanguage(key, language) {
+  return /^(?:name|amount):/.test(key) ? recipeIngredientLanguage(language) : language;
+}
+
+export function recipeSlotUsesCorrectLanguage(key, text, language) {
+  if (typeof text !== 'string' || !text.trim()) return true;
+  const expected = recipeSlotLanguage(key,language);
+  if (expected === 'ar') return [...text].every(char=>!/\p{L}/u.test(char)||arabicScript.test(char));
+  if (!replyUsesCorrectScript({answer:text},expected)) return false;
+  if (expected === 'en' && /^(?:name|amount):/.test(key)) {
+    const folded=text.toLowerCase().trim();
+    // Familiar food names such as hummus and labneh are legitimate English labels.
+    if (isArabizi(text) || /\b(?:ba2dounes|banadoura|na3na3|toum|khyar|basal|mele7|mal3a2a|ma3ale2|damme|7abbe|3elbe|fass|3a zaw2ak|7asab el zaw2)\b/i.test(folded)) return false;
+  }
+  if(expected==='fr'&&/^(?:name|amount):/.test(key)&&/\b(?:whole chicken|chicken breast|fresh milk|heavy cream|unsalted butter|red lentils|white onion|olive oil|ground pepper|black pepper|salt|butter|flour|eggs?|chicken|lentils?|rice|garlic|potatoes|tomatoes|carrots|pieces?|packs?|cups?|cans?|cloves?|tablespoons?|teaspoons?|to taste)\b/i.test(text))return false;
+  return true;
+}
+
+export function recipeReplyUsesCorrectLanguages(reply, language) {
+  if (!reply.recipe) return replyUsesCorrectScript(reply,language);
+  if (!recipeSlotUsesCorrectLanguage('answer',reply.answer,language) || !recipeSlotUsesCorrectLanguage('title',reply.recipe.title,language)) return false;
+  if (!(reply.recipe.steps||[]).every((step,index)=>recipeSlotUsesCorrectLanguage('step:'+index,step,language))) return false;
+  return (reply.items||[]).every((item,index)=>recipeSlotUsesCorrectLanguage('name:'+index,item.name,language)&&recipeSlotUsesCorrectLanguage('amount:'+index,item.amount,language));
+}
+
+export function arabicRecipeUnits(text) {
+  if(typeof text!=='string')return text;
+  const units={kg:'كغ',gr:'غ',g:'غ',ml:'مل',cl:'سل',l:'لتر',lb:'رطل',oz:'أونصة',tbsp:'ملعقة كبيرة',tsp:'ملعقة صغيرة',pcs:'قطع',piece:'قطعة',pieces:'قطع',pack:'عبوة',packs:'عبوات',cup:'كوب',cups:'أكواب',clove:'فص',cloves:'فصوص',can:'علبة',cans:'علب'};
+  return text.replace(/(\p{Nd}+(?:[.,٫]\p{Nd}+)?)\s*(kg|gr|g|ml|cl|l|lb|oz|tbsp|tsp|pcs|pieces?|packs?|cups?|cloves?|cans?)\b/giu,(_,number,unit)=>number+' '+units[unit.toLowerCase()]);
 }
 
 export const arabiziChatCopy = {

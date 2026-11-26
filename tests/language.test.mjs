@@ -86,7 +86,8 @@ test('Arabizi fallback recipes, scope replies and price follow-ups retain the la
   assert.equal(recipe.language, 'arz');
   assert.equal(recipe.card.kind, 'recipe');
   assert.ok(recipe.card.steps.every(step => !arabicLetters.test(step)));
-  assert.ok(recipe.card.items.some(item => item.name === 'ba2dounes'));
+  assert.ok(recipe.card.items.some(item => /parsley/i.test(item.name)));
+  assert.ok(recipe.card.items.every(item => !/ba2dounes|damme|7abbe|ma3ale2|mal3a2a/i.test(item.name+' '+item.amount)));
   const scope = await (await worker.fetch(request('baddi write code'))).json();
   assert.equal(scope.language, 'arz');
   assert.ok(scope.text.startsWith('Fiyye'));
