@@ -1,4 +1,4 @@
-import { packQuantity, basketSummary, groupShoppingEntries, shoppingCopy } from './shopping.js';
+import { packQuantity, basketSummary, groupShoppingEntries, shoppingCopy, purchaseAmount } from './shopping.js';
 import { detectReplyLanguage, arabiziChatCopy, frenchChatCopy, replyLocale } from './language.js';
 import { customerCopy } from './customer-copy.js';
 import { createProductPreviews } from './product-preview.js';
@@ -259,6 +259,7 @@ function renderCard(card, language) {
     const name = (language === 'fr' || (language === 'arz' && recipe)) && item.name ? item.name : product.name[language] || product.name.en;
     details.append(element('strong', '', name));
     details.append(element('small', '', productDetails(product, language, item.amount)));
+    if (recipe && packQuantity(item, product)>1) details.append(element('small','',localizedNumber(packQuantity(item,product),language)+' '+getText('packs',language)));
     if (product.description?.[language] && (!recipe || product.sourceKind === 'screenshot')) {
       details.append(element('small', '', product.description[language]));
     }
@@ -443,7 +444,7 @@ function conversationHistory() {
       ...(card.kind === 'recipe' && { recipeKey: card.listKey, title: card.title, servings: card.servings }),
       items: card.items.map(item => {
         const product = products.get(item.id);
-        return [item.id, product?.name.en || item.name, item.amount, product?.size.en, product?.price, product?.available];
+        return [item.id, product?.name.en || item.name, item.amount, product?.size.en, product?.price, product?.available, item.grams, item.catalogQuery];
       }),
     };
     const entry = { role, content: [summary && JSON.stringify(summary), content, ...(card?.steps ?? [])]
@@ -581,7 +582,7 @@ function renderList() {
   byId('list-toggle').setAttribute('aria-label', getText('list') + ', ' + entries.length);
   byId('list-total').textContent = price(summary.total);
   byId('pack-count').textContent = localizedNumber(summary.quantity) + ' ' + getText('packs');
-  byId('price-note').textContent = [summary.unpriced ? getText('unknownPrices') : '',summary.unavailable ? getText('unavailableItems') : ''].filter(Boolean).join(' · ');
+  byId('price-note').textContent = [summary.unpriced ? getText('unknownPrices') : '',summary.unavailable ? getText('unavailableItems') : '',summary.uncertain ? ({en:'Check quantities for items with unclear pack sizes',ar:'تأكد من كميات المنتجات التي لا يتضح حجم عبواتها',arz:'T2akkad men el kammiyet lal products li 7ajmon mish wade7',fr:'Vérifiez les quantités des articles au format incertain'})[lang] : ''].filter(Boolean).join(' · ');
   byId('clear-list').disabled = !entries.length;
   if (!entries.length) {
     const empty = element('div','empty-list'); const graphic = element('span','empty-icon'); graphic.append(icon('basket'));
@@ -697,9 +698,13 @@ function addToList(key, items, language, replaceRecipe = false, source) {
   const snapshot = listSnapshot();
   const card = chat.findLast(message => message.card?.listKey === key)?.card;
   const amounts = new Map();
+  const purchases = new Map();
   for (const item of items) {
     const product = products.get(item.id);
-    if (product && product.available !== false) amounts.set(item.id, item.amount || '1 pack');
+    if (product && product.available !== false) {
+      amounts.set(item.id, [amounts.get(item.id),item.amount||'1 pack'].filter(Boolean).join(' + '));
+      purchases.set(item.id,[purchases.get(item.id),purchaseAmount(item,product)].filter(Boolean).join(' + '));
+    }
   }
   const affected = new Set(amounts.keys());
   if (replaceRecipe) {
@@ -711,16 +716,19 @@ function addToList(key, items, language, replaceRecipe = false, source) {
   for (const id of affected) {
     const previous = list.get(id);
     const contributions = { ...(previous?.contributions ?? (previous ? { legacy: previous.amount || '1 pack' } : {})) };
+    const purchaseContributions = { ...previous?.purchaseContributions };
     const amount = amounts.get(id);
-    if (contributions[key] === amount) continue;
+    if (contributions[key] === amount && (!amount || purchaseContributions[key]===purchases.get(id))) continue;
     if (amount) contributions[key] = amount;
     else delete contributions[key];
+    if (amount) purchaseContributions[key]=purchases.get(id);
+    else delete purchaseContributions[key];
     const values = Object.values(contributions);
     const groups = { ...(previous?.groups || {}) };
     if (amount && card) groups[key] = { title: card.title || getText('allGroup'), kind: card.kind };
     else if (!amount) delete groups[key];
     const product = products.get(id) || previous;
-    if (values.length) list.set(id, { id, name: product.name, price: product.price, size: product.size, available: product.available, imageUrl: product.imageUrl, category: product.category, groups, contributions,
+    if (values.length) list.set(id, { id, name: product.name, price: product.price, size: product.size, available: product.available, imageUrl: product.imageUrl, category: product.category, groups, contributions, purchaseContributions,
       amount: totalAmounts(values, 'en'), checked: false });
     else list.delete(id);
     changed = true;

@@ -189,6 +189,33 @@ function priceReply(items, lang) {
   return { text: text || missing, priceOnly: true, card: items.length ? { kind: 'products', items } : null };
 }
 
+function directProductReply(plan, lang) {
+  if(plan.intent==='recipe'||!['price','availability','comparison'].includes(plan.lookupKind)||!Array.isArray(plan.queries)||!plan.queries.length)return null;
+  const groups=plan.queries.slice(0,12).map(query=>typeof query==='string'&&query.trim()?searchInventory(query.slice(0,120)):[]);
+  // Incomplete or ambiguous lookups receive the normal conversational answer.
+  if(groups.some(group=>!group.length))return null;
+  const matches=[...new Map(groups.flat().map(product=>[product.id,product])).values()];
+  if(plan.lookupKind==='price'){
+    const items=matches.slice(0,8).map(product=>({id:product.id}));
+    return priceReply(items,lang);
+  }
+  if(plan.lookupKind==='availability'){
+    const available=matches.filter(product=>product.available===true);
+    const selected=[...new Map(groups.flatMap(group=>{const stocked=group.filter(product=>product.available===true);return (stocked.length?stocked:group).slice(0,Math.max(1,Math.floor(8/groups.length)));}).map(product=>[product.id,product])).values()];
+    return {text:available.length?customerMessages[lang].products:customerMessages[lang].soldOut,card:{kind:'products',items:selected.map(product=>({id:product.id,details:false}))}};
+  }
+  const basis=plan.comparisonBasis||'pack';
+  const premium=plan.pricePreference==='premium';
+  const rows=rankedPrices(matches,basis,premium?'premium':'cheapest');
+  if(!rows.length)return null;
+  const unit={kg:['/ kg','/ كغ','/ kg','/ kg'],g100:['/ 100 g','/ ١٠٠ غ','/ 100 g','/ 100 g'],litre:['/ L','/ لتر','/ L','/ L'],ml100:['/ 100 ml','/ ١٠٠ مل','/ 100 ml','/ 100 ml'],piece:['/ unit','/ قطعة','/ 7abbe','/ unité'],pack:['/ pack','/ عبوة','/ 3elbe','/ article']}[basis]||['','','',''];
+  const languageIndex=['en','ar','arz','fr'].indexOf(lang);
+  const headings={en:premium?'Highest-priced available options:':'Lowest-priced available options:',ar:premium?'أغلى الخيارات المتوفرة:':'أرخص الخيارات المتوفرة:',arz:premium?'Aghla khiyarat mawjoude:':'Ar5as khiyarat mawjoude:',fr:premium?'Options disponibles les plus chères :':'Options disponibles les moins chères :'};
+  const selected=rows.slice(0,6);
+  const priceLines=selected.map(({product,value})=>`${product.name[lang]||product.name.en} · $${value.toFixed(2)} ${unit[languageIndex]}`);
+  return {text:[headings[lang],...priceLines].join('\n'),card:{kind:'products',items:selected.map(({product})=>({id:product.id,details:false}))}};
+}
+
 const barePriceFollowup = /^(?:how much (?:is|was) (?:it|that|this)|what(?:s| is) (?:its|the) price|(?:قديش|كم) (?:(?:حق|سعر)(?:ه|ها|ا|هن)|السعر)|بكم)\s*[?!؟.]*$/iu;
 const namedPriceQuery = /^(?:how much (?:does|do|is|are)|what(?: s| is) the price|(?:the )?price of|قديش|بكم|كم سعر)(?: |$)/u;
 
@@ -202,6 +229,35 @@ function lastSingleProduct(history) {
   } catch {
     return null;
   }
+}
+
+function previousRecipeCard(history) {
+  for(const message of [...history].reverse()){
+    if(message.role!=='assistant'||!message.content.startsWith('{'))continue;
+    try{
+      const card=JSON.parse(message.content.split('\n',1)[0]);
+      if(card.kind==='recipe'&&Number.isInteger(card.servings)&&card.servings>0&&Array.isArray(card.items))return card;
+    }catch{ /* An older history message may not contain a complete card. */ }
+  }
+  return null;
+}
+
+function scaledRecipeMatches(reply, previous, servings) {
+  if(!previous||!servings||previous.servings===servings)return true;
+  const factor=servings/previous.servings;
+  for(const row of previous.items){
+    const query=normalize(row[7]||row[1]||'');
+    const item=reply.items.find(entry=>normalize(entry.catalogQuery||entry.name||'')===query);
+    if(!item)continue;
+    const before=measurement(row[2]);
+    const after=measurement(item.amount);
+    if(before&&after&&before.kind===after.kind){
+      const expected=before.value*factor;
+      const tolerance=Math.max(1,expected*.15);
+      if(Math.abs(after.value-expected)>tolerance)return false;
+    }else if(Number.isFinite(row[6])&&row[6]>0&&Number.isFinite(item.grams)&&item.grams>0&&Math.abs(item.grams-row[6]*factor)>Math.max(5,row[6]*factor*.15))return false;
+  }
+  return true;
 }
 
 function shoppingLookupQueries(input) {
@@ -293,6 +349,9 @@ function demoReply(input, lang, context) {
 }
 
 const scopeRules = [
+  'Set pricePreference to cheapest for lowest-cost requests, premium for most-expensive or premium-price requests, otherwise standard. Carry forward explicit price preferences and spending limits for recipe edits. Do not confuse the highest price per unit with the highest package price.',
+  'Set servings to the explicit requested number of people for a recipe or a change to an earlier recipe, including numbers written in words and Arabic or Arabizi. Carry forward the previous recipe serving count when editing it. Use null for non-recipe questions or when no count is specified. A request to change servings of an existing recipe is intent=recipe. Set servingsOnly true only when the latest request exclusively changes the serving count of an earlier recipe.',
+  'Set lookupKind to price for a simple listed-price question, availability for a simple stock question, comparison for a numerical price ranking or lowest/highest price request, and none for every other task. For comparison set comparisonBasis to kg, g100, litre, ml100, piece or pack according to the requested unit; use pack where no unit is requested. In lookup queries preserve the exact brand, product type, size, variety and dietary qualifiers. Return one separate concise query per requested product. Never select a direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
   "Set request.budgetUsd to the shopper's total spending limit in USD when explicitly stated, including English, Arabic, Arabizi and French amounts. Otherwise use null. A product unit price is not a total budget. Do not assume pantry items are already owned unless the shopper says so.",
   'Set request.intent=recipe for a clearly understood cooking request. If the dish itself or a critical requirement is genuinely ambiguous, use intent=other and plan a brief relevant clarification. Missing supplier matches do not make a recipe request ambiguous or out of scope.',
   'You are a scope reviewer for Al Makhazen COOP’s customer shopping assistant.',
@@ -313,12 +372,13 @@ const scopeRules = [
 
 const scopeSchema = {
   type: 'object', additionalProperties: false, required: ['allowed', 'language', 'priceOnly', 'request'],
-  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' }, request: { type: 'object', additionalProperties:false, required:['intent','englishRequest','queries','budgetUsd'], properties:{intent:{type:'string',enum:['recipe','products','store','followup','other']},englishRequest:{type:'string'},queries:{type:'array',items:{type:'string'}},budgetUsd:{type:['number','null']}} } },
+  properties: { allowed: { type: 'boolean' }, language: { type: 'string', enum: ['en', 'ar', 'arz', 'fr'] }, priceOnly: { type: 'boolean' }, request: { type: 'object', additionalProperties:false, required:['intent','englishRequest','queries','budgetUsd','pricePreference','servings','servingsOnly','lookupKind','comparisonBasis'], properties:{intent:{type:'string',enum:['recipe','products','store','followup','other']},englishRequest:{type:'string'},queries:{type:'array',items:{type:'string'}},budgetUsd:{type:['number','null']},pricePreference:{type:'string',enum:['standard','cheapest','premium']},servings:{type:['integer','null']},servingsOnly:{type:'boolean'},lookupKind:{type:'string',enum:['none','price','availability','comparison']},comparisonBasis:{type:'string',enum:['pack','kg','g100','litre','ml100','piece']}} } },
 };
 
 const directCodingRequest = /\b(?:write|create|generate|provide|output|debug|fix)\s+(?:(?:for me|me)\s+)?(?:(?:a|some|the|my)\s+)?(?:(?:python|javascript|typescript|sql|html|bash)\s+)?(?:code|script|program)\b(?!\s+(?:for a discount|for checkout|for a coupon))/i;
 
 const rules = [
+  'Honor the computed requestedServings exactly. For a recipe revision scale each ingredient quantity and edible grams consistently, and rewrite any quantities mentioned in preparation steps. Do not scale cooking temperatures or times mechanically. Use measured g, kg, ml, L, or explicit number of pieces wherever possible, with the customer-facing amount in the reply language. When a shopper already has an ingredient, mention its preparation quantity in the steps but omit it from purchases. Avoid duplicating ingredients or using a package name as a quantity. The server will select appropriate low-cost or premium price options as requested; refer to ingredients generically in preparation steps so brand and pack changes remain consistent.',
   'For a spending budget, design the meal around suitable low-cost products and full-pack purchase costs. Do not assume pantry ingredients are free or already owned. The server computes the final shopping cost and may choose lower-cost equivalent brands or sizes; do not invent a total or claim a budget is met from portion costs alone.',
   'A serverRecipeRevision draft is your previous proposal, not a new shopper requirement. When the server offers another form of the same food family and the shopper did not explicitly require the old form, use an available offered choice, update its ingredient name and catalogQuery to the actual selected form, and adjust the steps accordingly. Do not keep a missing proposed cut or variety merely because it appeared in your draft. Keep all real shopper constraints.',
   'For a clearly understood recipe request, return a complete recipe card on this turn. Default to four servings if no count is given, and allow later adjustments. Do not ask the shopper to repeat the dish, add the word recipe, switch languages, or give a serving count before receiving a useful recipe. Ask a clarification only if the dish or a critical requirement is genuinely unclear. Keep unresolved ingredients for server matching rather than replacing the whole recipe with a stock question.',
@@ -541,7 +601,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
   const retrieved=new Set(initialProducts.map(product=>product.id));
   for(const group of state.revision?.unmatched||[])for(const product of group.choices)retrieved.add(product.id);
   const conversation=[{role:'user',content:JSON.stringify({earlierMessages:history,message:input,
-    interpretedRequest:typeof plan.englishRequest==='string'?plan.englishRequest.slice(0,900):null,spendingBudgetUsd:plan.budgetUsd??null,
+    interpretedRequest:typeof plan.englishRequest==='string'?plan.englishRequest.slice(0,900):null,spendingBudgetUsd:plan.budgetUsd??null,pricePreference:plan.pricePreference||'standard',requestedServings:plan.servings??null,
     requestIntent:plan.intent||null,serverProductMatches:initialMatches.map(g=>({...g,results:g.results.map(promptProduct)})),
     ...(state.revision&&{serverRecipeRevision:state.revision})})}];
   const priceInstructions = priceOnly ? '\nThis is a price-only request. Look up the exact product or products being asked about and return their IDs in items. Leave answer empty because the app displays the listed price directly.' : '';
@@ -625,6 +685,14 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       conversation.push(...output,{role:'user',content:'The interpreted request is a clear recipe request. Return a complete recipe card on this turn, defaulting to four servings if needed. Use null IDs for genuinely unresolved ingredients so the server can finish matching. Keep every explicit constraint and the required language; do not ask an unnecessary serving-count or spelling follow-up.'});
       continue;
     }
+    const priorRecipe=plan.servingsOnly?previousRecipeCard(history):null;
+    if(reply.recipe&&Number.isInteger(plan.servings)&&plan.servings>=1&&plan.servings<=100&&(reply.recipe.servings!==plan.servings||!scaledRecipeMatches(reply,priorRecipe,plan.servings))){
+      if(formatRetried)throw new Error('Invalid recipe serving count.');
+      formatRetried=true;
+      conversation.push(...output,{role:'user',content:'The requested serving count is '+plan.servings+'. Return the recipe and all quantities for exactly that many people.'});
+      continue;
+    }
+    if(reply.recipe&&priorRecipe?.recipeKey)reply.recipe.revisesRecipe=priorRecipe.recipeKey;
     if(lang==='arz')reply=normalizeArabiziRemainders(reply);
     if (!replyUsesCorrectScript(reply, lang) || mentionsInternalData(reply)) {
       if (shown) publish('', lang);
@@ -645,10 +713,12 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     }
     const budget=Number.isFinite(plan.budgetUsd)&&plan.budgetUsd>0&&plan.budgetUsd<=100000?plan.budgetUsd:null;
     let purchaseSummary,budgetAllergy=false;
-    if(recipe&&budget!==null){
+    const preference=plan.pricePreference||'standard';
+    if(recipe&&(budget!==null||preference!=='standard')){
       const shopperText=[input,...history.filter(m=>m.role==='user').map(m=>m.content)].join(' ');
       const shopperRequirements={...productTaxonomy.queryInfo(shopperText),allergy:/allerg|intoleran|حساس|7asasi/i.test(shopperText),preserveBrands:/\b(?:only|must be|uniquement|seulement)\b|فقط|حصراً/i.test(shopperText)};
       budgetAllergy=shopperRequirements.allergy;
+      shopperRequirements.pricePreference=preference;
       const previousProducts=recipeProducts;
       const optimized=optimizeRecipeBudget(entries,recipeProducts,recipeInventory,budget,shopperRequirements);
       recipeProducts=optimized.products;purchaseSummary=optimized.summary;
@@ -661,7 +731,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       const id = recipe ? recipeProducts[index]?.id || null : retrieved.has(entry.id) ? entry.id : null;
       const product = productsById.get(id);
       const grams = Number.isFinite(entry.grams) && entry.grams > 0 && entry.grams <= 25000 ? entry.grams : null;
-      return { id, name: plainReplyText(entry.name).slice(0, 120), grams, amount: plainReplyText(entry.amount).slice(0, 80),
+      return { id, name: plainReplyText(entry.name).slice(0, 120), grams, amount: plainReplyText(entry.amount).slice(0, 80), ...(recipe&&product&&{purchaseAmount:purchaseAmount({...entry,grams},product)}),
         catalogQuery: typeof entry.catalogQuery === 'string' ? entry.catalogQuery.slice(0, 120) : null,
         details: Boolean(showNutrition), energy: showNutrition && product ? productEnergy(product, grams) : null };
     });
@@ -683,7 +753,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const hasUnconfirmedIngredient = validRecipe && matches.some(item => productsById.get(item.id)?.available !== true);
     const availabilityNote = matches.some(item => !item.id) ? customerMessages[lang].missingRecipe : customerMessages[lang].soldOutRecipe;
     const text = hasUnconfirmedIngredient ? availabilityNote + ' ' + recipeAdaptationPrompt[lang] :
-      validRecipe&&budget!==null?recipeBudgetText(purchaseSummary,budget,lang,budgetAllergy):recipeAvailabilityProse(plainReplyText(answer).slice(0,4000),lang,Boolean(validRecipe));
+      validRecipe&&purchaseSummary?recipeBudgetText(purchaseSummary,budget===null?NaN:budget,lang,budgetAllergy):recipeAvailabilityProse(plainReplyText(answer).slice(0,4000),lang,Boolean(validRecipe));
     if (!text && !card) throw new Error('The model did not return a usable reply.');
     const prepared={text,card};
     if(validRecipe&&!state.revision&&matches.some(item=>!item.id)&&!signal.aborted){
@@ -812,6 +882,8 @@ async function resolveChat(input, body, env, requestSignal, publish) {
     if (!decision.allowed) return scopeReply();
     scopeAllowed = true;
     stage = 'reply';
+    const direct=directProductReply(decision.request||{},lang);
+    if(direct)return presentReply(direct,'ai',lang);
     const priceOnly = decision.priceOnly || asksLastPrice;
     return presentReply(await modelReply(env, model, input, history, lang, priceOnly, signal, publish, decision.request), 'ai', lang);
   } catch (error) {

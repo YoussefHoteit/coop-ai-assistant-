@@ -63,7 +63,11 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       if (normalize(entry.product.id) === query) return { entry, score: 10000 };
       if (entry.identifiers.includes(query)) return { entry, score: 9000 };
       const meta = taxonomy.records.get(entry.product.id);
-      if (queryInfo.types.includes(meta.productType) && !taxonomy.compatible(queryInfo,entry.product)) return {entry,score:0};
+      if ((queryInfo.types.length || queryInfo.qualifiers.length || queryInfo.brands.length) && !taxonomy.compatible(queryInfo,entry.product)) return {entry,score:0};
+      // An alias for the general commodity cannot satisfy an explicit variety.
+      const requiredAttributes=queryInfo.attributes.filter(attribute=>attribute!=='whole'||!queryInfo.qualifiers.includes('whole-wheat'));
+      const alternativeColours=/\bor\b|\bou\b/.test(query)&&requiredAttributes.filter(attribute=>['red','brown','green','white','yellow'].includes(attribute)).length>1;
+      if(queryInfo.types.length && requiredAttributes.some(attribute=>!meta.attributes.includes(attribute)&&!(alternativeColours&&['red','brown','green','white','yellow'].includes(attribute))))return {entry,score:0};
       if (entry.names.includes(query)) return { entry, score: 1000 + Number(meta.confidence!=='source-name'&&queryInfo.types.includes(meta.productType))*800 };
       let score = 0;
       if (queryVariants.some(term => entry.names.some(name => (' ' + name + ' ').includes(' ' + term + ' ')))) score = 500;

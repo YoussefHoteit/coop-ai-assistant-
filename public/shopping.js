@@ -1,39 +1,99 @@
 export function measurement(value) {
-  const text = String(value || '').toLowerCase().replace(/[٠-٩]/g, n => String('٠١٢٣٤٥٦٧٨٩'.indexOf(n))).replace(/[٬،]/g, ',').replace(/٫/g, '.');
-  const match = text.match(/^\s*(\d+(?:[.,]\d+)?)\s*(kg|gr|g|ml|cl|l|packs?|packets?|pcs|pieces?)\b/i);
+  const text = String(value || '').toLowerCase().replace(/([0-9])(?=[¼½¾⅓⅔])/g, '$1 ').normalize('NFKC')
+    .replace(/[٠-٩۰-۹]/g, n => String(n.charCodeAt(0) & 15)).replace(/٫/g, '.').replace(/⁄/g, '/').trim();
+  const match = text.match(/^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)\s*(.*)$/u);
   if (!match) return null;
-  const n = Number(match[1].replace(',', '.'));
-  const unit = match[2];
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return { value: n * ({ kg: 1000, l: 1000, cl: 10 }[unit] || 1), kind: ['kg', 'gr', 'g'].includes(unit) ? 'weight' : ['l', 'ml', 'cl'].includes(unit) ? 'volume' : /^(?:pcs|pieces?)$/.test(unit) ? 'pieces' : 'packs' };
+  const amount = match[1].replace(',', '.').split(/\s+(?=\d+\s*\/)/).reduce((sum, part) => {
+    const [n, d = '1'] = part.split('/');
+    return sum + Number(n) / Number(d);
+  }, 0);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const units = [
+    ['weight', 1000, /^(?:kg|kilos?|kilograms?|kilogrammes?|كغ|كجم|كيلو(?:غرام)?)(?!\p{L})/u],
+    ['weight', 1, /^(?:g|gr|grams?|grammes?|غ|غرام|جرام)(?!\p{L})/u],
+    ['weight', 453.59237, /^(?:lbs?|pounds?|livres?)(?!\p{L})/u],
+    ['weight', 28.349523125, /^(?:oz|ounces?)(?!\p{L})/u],
+    ['volume', 1000, /^(?:l|liters?|litres?|لتر|ليتر)(?!\p{L})/u],
+    ['volume', 10, /^(?:cl|centilitres?)(?!\p{L})/u],
+    ['volume', 1, /^(?:ml|millilitres?|milliliters?|مل|ملل)(?!\p{L})/u],
+    ['pieces', 1, /^(?:(?:large|small|medium|fresh|gros|petits?)\s+)?(?:pcs|pieces?|pièces?|eggs?|œufs?|oeufs?|بيض(?:ات)?|حبات?|قطع|وحدات?)(?!\p{L})/u],
+    ['packs', 1, /^(?:packs?|packets?|cans?|cartons?|bottles?|bags?|briques?|boîtes?|sachets?|paquets?|bouteilles?|علب|علبة|عبوات?|أكياس|كيس|قنينة|3elab|3elbe)(?!\p{L})/u],
+    ['volume', 15, /^(?:tbsp|tablespoons?|cuillères? à soupe|ملعقة كبيرة|ملاعق كبيرة)(?!\p{L})/u],
+    ['volume', 5, /^(?:tsp|teaspoons?|cuillères? à café|ملعقة صغيرة|ملاعق صغيرة)(?!\p{L})/u],
+  ];
+  const rest = match[2];
+  const multiplier = rest.match(/^[x×*]\s*(.+)$/u);
+  if (multiplier) {
+    const inner = measurement(multiplier[1]);
+    return inner && { value: amount * inner.value, kind: inner.kind };
+  }
+  const unit = units.find(([, , pattern]) => pattern.test(rest));
+  if (!unit) return null;
+  if (unit[0] === 'packs') {
+    const inner = measurement(rest.replace(unit[2], '').trim().replace(/^(?:of|de|d'|من)\s*/u, ''));
+    if (inner && ['weight','volume','pieces'].includes(inner.kind)) return { value: amount * inner.value, kind: inner.kind };
+  }
+  return { value: amount * unit[1], kind: unit[0] };
+}
+
+export function productMeasurement(product) {
+  const name = product.name?.en || '';
+  const multi = name.match(/\b\d+\s*[x×*]\s*\d+(?:[.,]\d+)?\s*(?:kg|gr|g|ml|cl|l|lb|oz|pcs)\b/i);
+  if(multi)return measurement(multi[0]);
+  const reverse=name.match(/\b(\d+(?:[.,]\d+)?\s*(?:kg|gr|g|ml|cl|l|lb|oz|pcs))\s*[x×*]\s*(\d+)\b/i);
+  if(reverse){const size=measurement(reverse[1]);if(size)return {value:size.value*Number(reverse[2]),kind:size.kind};}
+  const count=name.match(/\b(\d+)\s*(?:'s|s'|pcs|pieces)\b/i);
+  if(count)return {value:Number(count[1]),kind:'pieces'};
+  const size=measurement(product.size?.en||product.size||'');
+  if(/\beggs?\b/i.test(name)){
+    const eggCount=name.match(/\*\s*(\d+)\b|\b(\d+)\s*s\b/i);
+    if(eggCount)return {value:Number(eggCount[1]||eggCount[2]),kind:'pieces'};
+    if(size?.kind==='packs')return {value:size.value,kind:'pieces'};
+  }
+  return size;
+}
+
+export function purchaseAmount(entry, product) {
+  const amount = entry.purchaseAmount || entry.amount || '1 pack';
+  const pack = productMeasurement(product);
+  const parsed = measurement(amount);
+  if ((!parsed || parsed.kind !== pack?.kind && parsed.kind !== 'packs') && pack?.kind === 'weight' && Number.isFinite(entry.grams) && entry.grams > 0) return entry.grams + ' g';
+  return amount;
 }
 
 export function packQuantity(entry, product = entry) {
   if (Number.isInteger(entry.quantity) && entry.quantity > 0) return Math.min(99, entry.quantity);
-  const values = entry.contributions ? Object.values(entry.contributions) : [entry.amount || '1 pack'];
-  const pack = measurement(product.size?.en || product.size || '');
+  const values = entry.contributions ? Object.entries(entry.contributions).map(([key,value])=>entry.purchaseContributions?.[key]||value) : [purchaseAmount(entry,product)];
+  const pack = productMeasurement(product);
   let required = 0;
   let packs = 0;
-  for (const value of values) {
+  for (const value of values.flatMap(value=>String(value).split(' + '))) {
     const amount = measurement(value);
     if (amount?.kind === 'packs') packs += amount.value;
     else if (amount && pack && amount.kind === pack.kind) required += amount.value;
     else if (amount?.kind === 'pieces' && !pack) packs += amount.value;
   }
-  return Math.min(99, Math.max(1, Math.ceil(packs + (pack ? required / pack.value : 0))));
+  return Math.min(999, Math.max(1, Math.ceil(packs + (pack ? required / pack.value : 0))));
 }
 
 export function basketSummary(entries, productMap = new Map()) {
   let cents = 0, quantity = 0, unpriced = 0, unavailable = 0;
+  let uncertain = 0;
   for (const entry of entries) {
     const product = productMap.get(entry.id) || entry;
     const count = packQuantity(entry, product);
     quantity += count;
     if (product.available === false) { unavailable++; continue; }
+    const pack = productMeasurement(product);
+    const amounts = entry.contributions ? Object.entries(entry.contributions).map(([key,value])=>entry.purchaseContributions?.[key]||value) : [purchaseAmount(entry,product)];
+    if (!entry.quantity && amounts.flatMap(value=>String(value).split(' + ')).some(value => {
+      const amount = measurement(value);
+      return amount ? amount.kind!=='packs' && (amount.kind!==pack?.kind && !(amount.kind==='pieces'&&!pack)) : /\d/.test(value);
+    })) uncertain++;
     if (!Number.isFinite(product.price)) unpriced++;
     else cents += Math.round(product.price * 100) * count;
   }
-  return { count: entries.length, quantity, total: cents / 100, unpriced, unavailable };
+  return { count: entries.length, quantity, total: cents / 100, unpriced, unavailable, ...(uncertain && {uncertain}) };
 }
 
 export function groupShoppingEntries(entries, mode = 'all') {

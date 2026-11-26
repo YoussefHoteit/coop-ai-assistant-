@@ -73,7 +73,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   ];
   for(const[,type,departments]of aisleTypes)if(!defs.some(d=>d.type===type))define(type,type,departments);
   const whole = (text,term)=>(' '+text+' ').includes(' '+term+' ');
-  const qualifiers=[['gluten-free',/gluten free|sans gluten|\bgf\b/],['lactose-free',/lactose free|sans lactose/],['vegan',/\bvegan\b/],['unsalted',/unsalt|beurre doux/],['organic',/\borganic\b|\bbio\b/]];
+  const qualifiers=[['gluten-free',/gluten free|sans gluten|\bgf\b/],['lactose-free',/lactose free|sans lactose/],['vegan',/\bvegan\b/],['unsalted',/unsalt|beurre doux/],['organic',/\borganic\b|\bbio\b/],['whole-wheat',/whole wheat|wholemeal|whole grain|integral|ble complet|farine complete/],['unsweetened',/unsweetened|no added sugar|sans sucre ajoute|without added sugar/]];
   const attributes=[['red',/\bred\b|\bahmar\b|احمر/],['brown',/\bbrown\b|\basmar\b|اسمر/],['green',/\bgreen\b|اخضر/],['white',/\bwhite\b|\babyad\b|ابيض/],
     ['split',/\bsplit\b|majrou|مجروش/],['whole',/\bwhole\b|\barid\b|عريض/],['ground',/\bground\b|moulu|powder|مطحون/],['leaves',/\bleaves?\b|اوراق/],
     ['basmati',/\bbasmati\b/],['long-grain',/long grain/],['short-grain',/short grain/],['coarse',/coarse|khechen|خشن/],['fine',/\bfine\b|naem|ناعم/],
@@ -140,6 +140,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     residue=residue.replace(/\b(?:and|or|ou|the|a|an|of|for|about|plain|regular|all purpose|wheat|white|brown|red|green|black|fresh|frozen|dry|dried|ground|whole|split|chopped|finely|roughly|diced|sliced|peeled|grated|minced|freshly|seeds?|leaves|powder|to taste|gluten free|lactose free|unsalted|organic|vegan|basmati|long grain|short grain|coarse|fine|cooking|heavy|whipping|g|kg|ml|l)\b|\d+/g,'').replace(/\s+/g,'').trim();
     residue=residue.replace(/ناشفه|ناشف|مجفف|جاف|مطحون|طازج|مفروم|مقطع|كامل|احمر|اخضر|ابيض|اسمر|\b(?:secs?|seche|seches|moulu|moulue|entier|entiere|frais|fraiche|rouge|vert|blanc)\b|او/g,'').trim();
     residue=residue.replace(/^(?:yellow|jaune|safra|asfar|اصفر|صفراء|breasts?|poitrine|صدر|sader|sadr)$/,'');
+    for(const [,pattern] of qualifiers) residue=residue.replace(pattern,'');
     const aliasSafe=!residue;
     const info={text,types:[...new Set(aliasSafe?(longest?[longest.type]:types):[])],attributes:attrs,qualifiers:qualifiers.filter(([,rx])=>rx.test(text)).map(([tag])=>tag),brands:requestedBrands,storage:/\bdry\b|\bdried\b|ناشف|ناشفه|مجفف/.test(text)?'dry':/frozen|مجمد/.test(text)?'frozen':/\bfresh\b|طازج/.test(text)?'fresh':null,
       aliases:aliasSafe?defs.filter(d=>d.type===longest?.type).flatMap(d=>d.aliases):[]};

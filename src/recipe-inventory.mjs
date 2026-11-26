@@ -128,6 +128,7 @@ export function createRecipeInventory(products, baseSearch, normalize) {
       const meta = taxonomy.records.get(product.id), info = taxonomy.queryInfo(query);
       return { product, score: overlap * 10 + Number(overlap === requested.length) * 15 + Number(plain) * 8 + Number(product.available === true) * 20 + Number(info.types.includes(meta.productType))*50 + info.attributes.filter(a=>meta.attributes.includes(a)).length*15 };
     }).sort((a, b) => b.score - a.score || a.product.name.en.localeCompare(b.product.name.en)).map(({ product }) => product);
+    if(candidateCache.size>=512)candidateCache.delete(candidateCache.keys().next().value);
     candidateCache.set(key, ranked);
     return ranked.slice(0, limit);
   }
@@ -168,5 +169,5 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     return matches.find(product => product.available === true) ||
       (existing && eligible(entry, existing) ? existing : matches[0]) || null;
   }
-  return { search, resolve, candidates, eligible, taxonomy };
+  return { search, resolve, candidates, eligible, taxonomy, products };
 }
