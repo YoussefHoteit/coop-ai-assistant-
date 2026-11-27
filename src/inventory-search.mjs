@@ -1,9 +1,12 @@
 import { createProductTaxonomy } from './inventory-taxonomy.mjs';
+import { createCatalogDescriptions } from './catalog-descriptions.mjs';
 // Index once per server instance. Only matching records are sent to the AI.
 export function createInventorySearch(products, categoryLabels, normalize) {
   const originalNormalize=normalize;
   normalize=value=>originalNormalize(value).replace(/(?<!\d)\.|\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
   const taxonomy = createProductTaxonomy(products, categoryLabels, normalize);
+  const descriptions=createCatalogDescriptions(products,categoryLabels,taxonomy,normalize);
+  const descriptionAliases=new Set();
   const groups = [
     ['chicken', 'دجاج', 'جاج', 'poulet', 'djej', 'jaj'],
     ['beef', 'بقر', 'boeuf'], ['fish', 'سمك', 'poisson'],
@@ -44,7 +47,9 @@ export function createInventorySearch(products, categoryLabels, normalize) {
   const wordsOf = value => normalize(value).split(' ').filter(Boolean);
   const indexed = products.map(product => {
     const name = normalize(product.name.en);
-    const aliases = [...(product.aliases || '').split('|').filter(Boolean).map(normalize), ...(taxonomy.records.get(product.id)?.searchTerms || [])];
+    const profile=descriptions.get(product.id);
+    for(const alias of profile.aliases){descriptionAliases.add(alias);descriptionAliases.add(wordsOf(alias).map(singular).join(' '));}
+    const aliases = [...(product.aliases || '').split('|').filter(Boolean).map(normalize), ...(taxonomy.records.get(product.id)?.searchTerms || []),...profile.aliases];
     const identifiers = [product.id, product.sku].filter(Boolean).map(normalize);
     const categoryKeys = [product.category, ...(product.additionalCategories || [])];
     const labels = categoryKeys.flatMap(key => categoryLabels[key] || [key]);
@@ -52,7 +57,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
     const tokens = new Set(wordsOf([product.name.en, product.name.ar, product.brand, product.size.en,
       product.subcategory, ...labels, ...aliases].filter(Boolean).join(' ')).map(singular));
     const nameTokens = new Set(wordsOf(product.name.en).map(singular));
-    return { product, name, names, identifiers, tokens, nameTokens, categoryKeys };
+    return { product, name, names, identifiers, tokens, nameTokens, categoryKeys,profile };
   });
   // Exact department/aisle aliases come from the inventory itself, so new
   // categories can be searched even when no hand-authored type exists.
@@ -100,7 +105,13 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       if(categoryIds)return {entry,score:categoryIds.has(entry.product.id)?1500:0};
       const meta = taxonomy.records.get(entry.product.id);
       if(meta.department==='pets'&&!petContext&&!(meta.brandKey&&(' '+query+' ').includes(' '+meta.brandKey+' '))&&entry.name!==query)return {entry,score:0};
-      if ((queryInfo.types.length || queryInfo.qualifiers.length || queryInfo.brands.length) && !taxonomy.compatible(queryInfo,entry.product)) return {entry,score:0};
+      if ((queryInfo.types.length || queryInfo.qualifiers.length || queryInfo.brands.length) && !taxonomy.compatible(queryInfo,entry.product)) {
+        // A name+aisle-backed description can recover a supplier abbreviation
+        // whose previous generic aisle classification missed the precise type.
+        // No relaxation of diet, species, cut, brand or storage constraints.
+        const recovered=!queryInfo.protein&&entry.profile.strictType&&queryInfo.types.includes(entry.profile.strictType)&&taxonomy.compatible({...queryInfo,types:[]},entry.product);
+        if(!recovered)return {entry,score:0};
+      }
       // An alias for the general commodity cannot satisfy an explicit variety.
       const requiredAttributes=queryInfo.attributes.filter(attribute=>attribute!=='whole'||!queryInfo.qualifiers.includes('whole-wheat'));
       const alternativeColours=/\bor\b|\bou\b/.test(query)&&requiredAttributes.filter(attribute=>['red','brown','green','white','yellow'].includes(attribute)).length>1;
@@ -129,6 +140,8 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       .map(({ entry }) => entry.product);
   }
   search.taxonomy = taxonomy;
+  search.descriptions=descriptions;
+  search.hasDescriptionAlias=value=>descriptionAliases.has(normalize(value))||descriptionAliases.has(wordsOf(value).map(singular).join(' '));
   search.retailCanonicalQuery=retailCanonicalQuery;
   search.hasSourceCategory=query=>sourceCategories.has(categoryKey(query));
   return search;

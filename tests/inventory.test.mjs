@@ -24,8 +24,12 @@ test('every imported product can be retrieved with its original facts, including
   assert.equal(new Set(received.map(p => p.id)).size, 7666);
   const byId = new Map(received.map(p => [p.id, p]));
   for (const original of inventory.products) {
-    const { imageUrl, ...facts } = byId.get(original.id);
-    assert.deepEqual(facts, original);
+    const { imageUrl, description, sourceDescription, descriptionSource, descriptionIdentity, descriptionMethod, ...facts } = byId.get(original.id);
+    assert.deepEqual({...facts,description:sourceDescription}, original);
+    assert.equal(descriptionSource,'catalog-derived');
+    assert.ok(description?.en?.trim()&&descriptionMethod);
+    assert.ok(description.en.startsWith(original.name.en.replace(/\s+/g,' ').trim().replace(/[.\s]+$/,'')),original.id);
+    assert.ok(descriptionIdentity===null||typeof descriptionIdentity==='string');
     assert.ok(imageUrl?.startsWith('https://minimapi.weevi.com/'));
   }
   assert.equal(received.filter(p => p.available === true).length, 5075);

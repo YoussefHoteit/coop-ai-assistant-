@@ -274,8 +274,9 @@ function renderCard(card, language) {
     details.append(element('strong', '', name));
     details.append(element('small', '', productDetails(product, ingredientLanguage, item.amount)));
     if (recipe && packQuantity(item, product)>1) details.append(element('small','',localizedNumber(packQuantity(item,product),ingredientLanguage)+' '+ingredientText('packs')));
-    if (product.description?.[ingredientLanguage] && (!recipe || product.sourceKind === 'screenshot'&&recipeSlotUsesCorrectLanguage('name:0',product.description[ingredientLanguage],language))) {
-      details.append(element('small', '', product.description[ingredientLanguage]));
+    const displayDescription=product.descriptionSource==='catalog-derived'?product.sourceDescription:product.description;
+    if (displayDescription?.[ingredientLanguage] && (!recipe || product.sourceKind === 'screenshot'&&recipeSlotUsesCorrectLanguage('name:0',displayDescription[ingredientLanguage],language))) {
+      details.append(element('small', '', displayDescription[ingredientLanguage]));
     }
     const nutrition = nutritionInfo(product, item, ingredientLanguage);
     if (nutrition) details.append(nutrition);

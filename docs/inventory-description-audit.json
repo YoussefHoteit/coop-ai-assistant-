@@ -1,0 +1,142 @@
+{
+  "source": "Al_Makhazen_Product_Catalog.xlsx",
+  "snapshotDate": "2026-11-19",
+  "sourceSha256": "7370099e00090bf8efc61744dbdb9b73771c8ba8b2b852045b0b04fadc3e73df",
+  "productCount": 7666,
+  "descriptionCount": 7666,
+  "uniqueIds": 7666,
+  "missingDescriptions": 0,
+  "originalSupplierDescriptionsPreserved": 23,
+  "sourceFactsUnchanged": true,
+  "specificIdentityCount": 3107,
+  "methods": {
+    "source-aisle": 3127,
+    "listed-name-and-category": 1432,
+    "taxonomy-identity": 1494,
+    "name-and-aisle": 1157,
+    "source-term": 257,
+    "species-cut-preparation": 199
+  },
+  "departments": {
+    "beverages": {
+      "products": 555,
+      "withDescriptions": 555,
+      "withSpecificIdentity": 122
+    },
+    "frozen": {
+      "products": 364,
+      "withDescriptions": 364,
+      "withSpecificIdentity": 168
+    },
+    "pantry": {
+      "products": 1522,
+      "withDescriptions": 1522,
+      "withSpecificIdentity": 851
+    },
+    "personal-care": {
+      "products": 1036,
+      "withDescriptions": 1036,
+      "withSpecificIdentity": 608
+    },
+    "electronics": {
+      "products": 27,
+      "withDescriptions": 27,
+      "withSpecificIdentity": 18
+    },
+    "home-care": {
+      "products": 664,
+      "withDescriptions": 664,
+      "withSpecificIdentity": 235
+    },
+    "organic": {
+      "products": 218,
+      "withDescriptions": 218,
+      "withSpecificIdentity": 86
+    },
+    "snacks": {
+      "products": 1289,
+      "withDescriptions": 1289,
+      "withSpecificIdentity": 118
+    },
+    "kitchen": {
+      "products": 104,
+      "withDescriptions": 104,
+      "withSpecificIdentity": 35
+    },
+    "coffee-tea": {
+      "products": 247,
+      "withDescriptions": 247,
+      "withSpecificIdentity": 50
+    },
+    "bakery": {
+      "products": 143,
+      "withDescriptions": 143,
+      "withSpecificIdentity": 32
+    },
+    "school": {
+      "products": 40,
+      "withDescriptions": 40,
+      "withSpecificIdentity": 17
+    },
+    "pets": {
+      "products": 142,
+      "withDescriptions": 142,
+      "withSpecificIdentity": 6
+    },
+    "produce": {
+      "products": 209,
+      "withDescriptions": 209,
+      "withSpecificIdentity": 185
+    },
+    "dairy": {
+      "products": 688,
+      "withDescriptions": 688,
+      "withSpecificIdentity": 399
+    },
+    "meat": {
+      "products": 90,
+      "withDescriptions": 90,
+      "withSpecificIdentity": 87
+    },
+    "tobacco": {
+      "products": 102,
+      "withDescriptions": 102,
+      "withSpecificIdentity": 0
+    },
+    "baby": {
+      "products": 98,
+      "withDescriptions": 98,
+      "withSpecificIdentity": 48
+    },
+    "seasonal": {
+      "products": 47,
+      "withDescriptions": 47,
+      "withSpecificIdentity": 8
+    },
+    "fish": {
+      "products": 10,
+      "withDescriptions": 10,
+      "withSpecificIdentity": 3
+    },
+    "toys": {
+      "products": 23,
+      "withDescriptions": 23,
+      "withSpecificIdentity": 11
+    },
+    "other": {
+      "products": 23,
+      "withDescriptions": 23,
+      "withSpecificIdentity": 13
+    },
+    "ready": {
+      "products": 25,
+      "withDescriptions": 25,
+      "withSpecificIdentity": 7
+    }
+  },
+  "notes": [
+    "Descriptions are derived from each individual source title, listed category, brand, unit, supplier text and evidence-based product identity.",
+    "Broad source aisles and ambiguous names are retained without guessing more specific details.",
+    "The descriptions are not new manufacturer label data; ingredients, nutrition and allergens remain unchanged."
+  ]
+}

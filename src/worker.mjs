@@ -357,7 +357,7 @@ function literalProductReply(input, lang, history=[]) {
       // A verified short product phrase is a complete inventory lookup, not
       // a request for samples. Leave ambiguous dish names to cooking intent.
       const term=cleanCatalogTerm(text),canonical=baseInventorySearch.retailCanonicalQuery(term),info=productTaxonomy.queryInfo(canonical);
-      const supported=info.protein?.metadataOnly||info.aliases.includes(canonical)||baseInventorySearch.hasSourceCategory(canonical);
+      const supported=info.protein?.metadataOnly||info.aliases.includes(canonical)||baseInventorySearch.hasSourceCategory(canonical)||baseInventorySearch.hasDescriptionAlias(canonical);
       if(!term||term.split(' ').length>7||!supported||!(/[?؟]\s*$/.test(input)||productHistoryGroup(history)))return null;
       query=term;lookupKind='availability';
     }else{
@@ -381,7 +381,7 @@ function literalProductReply(input, lang, history=[]) {
   const queries=terms.map(term=>baseInventorySearch.retailCanonicalQuery(term));
   // For a plain inventory term without a known taxonomy rule, accept a name
   // phrase only when it is actually supported by source product names.
-  if(!queries.every(term=>term&&term.length<=120&&retailMatches(term).some(p=>productTaxonomy.queryInfo(term).types.length||baseInventorySearch.hasSourceCategory(term)||(' '+productTaxonomy.canonicalQuery(p.name.en)+' ').includes(' '+term+' '))))return null;
+  if(!queries.every(term=>term&&term.length<=120&&retailMatches(term).some(p=>productTaxonomy.queryInfo(term).types.length||baseInventorySearch.hasSourceCategory(term)||baseInventorySearch.hasDescriptionAlias(term)||(' '+productTaxonomy.canonicalQuery(p.name.en)+' ').includes(' '+term+' '))))return null;
   return directProductReply({lookupKind,queries,pricePreference,comparisonBasis,onlyExtreme:lookupKind==='comparison'},lang);
 }
 
@@ -648,6 +648,7 @@ const rules = [
   'For a clearly understood recipe request, return a complete recipe card on this turn. Default to four servings if no count is given, and allow later adjustments. Do not ask the shopper to repeat the dish, add the word recipe, switch languages, or give a serving count before receiving a useful recipe. Ask a clarification only if the dish or a critical requirement is genuinely unclear. Keep unresolved ingredients for server matching rather than replacing the whole recipe with a stock question.',
   'If serverRecipeRevision is provided, keep the same requested dish, servings and explicit shopper constraints, and revise only the unmatched ingredient forms using the verified same-family alternatives. Adjust the preparation steps for the selected form and explain any meaningful preparation change. Never substitute an explicit ingredient variety, dietary requirement or brand without agreement. Use only exact real product IDs and do not claim an alternative is the original ingredient.',
   'For recipes, keep answer about the dish, useful preparation notes, explicit adaptations or budget. Do not narrate missing matches or uncertain stock just because an ingredient ID is null: the server resolves every ingredient afterwards and adds verified availability notes itself. Keep genuine allergy/label warnings when relevant.',
+  'Every product now has a catalog-derived description that combines its actual listed title, category, brand, unit and evidence-backed identity. Use it to identify the exact SKU and explain it naturally in the shopper’s language. A derived description is not manufacturer label data. Preserve original supplier text and never infer unlisted ingredients, nutrition, allergens, certifications or technical specifications.',
   'Use the verified protein classification (species, cut and preparation) when matching raw ingredients. The Chicken aisle may list a breast as whole fillet without the word chicken. Never replace plain raw meat with a breaded, marinated, smoked, deli or otherwise prepared product; keep the intended raw cut in catalogQuery even if a matching product display name differs.',
   'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
   'You are the Al Makhazen COOP shopping assistant for its complete multi-department catalog. Follow the response language specified below for the entire reply, including recipe titles, steps, ingredients and quantities. Retain original brand names or foreign terms only when they clarify the answer.',
@@ -710,7 +711,11 @@ const inventoryTool = {
 
 function presentProduct(product) {
   const imageUrl = DATA.productImages?.[product.id];
-  return imageUrl ? { ...product, imageUrl } : product;
+  const profile=baseInventorySearch.descriptions.get(product.id);
+  // Original supplier notes remain available independently. The descriptions
+  // are descriptions of the verified record, not newly obtained label facts.
+  const enriched=profile&&(product.sourceKind==='catalog'||activeInventory)?{...product,sourceDescription:product.description||null,description:{...(product.description||{}),en:profile.description},descriptionSource:'catalog-derived',descriptionIdentity:profile.identity,descriptionMethod:profile.method}:product;
+  return imageUrl ? { ...enriched, imageUrl } : enriched;
 }
 
 function plainReplyText(value) {
@@ -795,7 +800,8 @@ async function requestOpenAI(env, body, signal, onText) {
 
 function promptProduct(product) {
   const metadata=productTaxonomy.records.get(product.id);
-  return { ...product, classification: metadata && {type:metadata.productType,aisles:metadata.aisles,family:metadata.familyKey,form:metadata.storage,protein:metadata.protein,attributes:metadata.attributes,qualifiers:metadata.qualifiers,brandContext:metadata.brand} };
+  const profile=baseInventorySearch.descriptions.get(product.id);
+  return { ...product, ...(profile&&{description:{en:profile.description},sourceDescription:product.description?.en||null,descriptionSource:'catalog-derived'}), classification: metadata && {type:profile?.strictType||metadata.productType,aisles:metadata.aisles,family:metadata.familyKey,form:metadata.storage,protein:metadata.protein,attributes:metadata.attributes,qualifiers:metadata.qualifiers,brandContext:metadata.brand} };
 }
 
 const alternativeTool = {type:'function',name:'find_alternatives',strict:true,
