@@ -50,6 +50,7 @@ export function optimizeRecipeBudget(entries,resolved,inventory,budget,requireme
       const size=productMeasurement(p);
       return !conditional(p)&&p.available===true&&Number.isFinite(p.price)&&inventory.eligible(clean,p)&&other.familyKey===meta.familyKey&&
         (!requiredSize||size?.kind===pack.kind&&size.value===pack.value)&&
+        (!meta.protein||other.protein?.species===meta.protein.species&&other.protein.cut===meta.protein.cut&&other.protein.preparation===meta.protein.preparation&&other.protein.form===meta.protein.form)&&
         (!lockedBrand||other.brandKey===meta.brandKey)&&meta.attributes.every(a=>other.attributes.includes(a))&&
         [...meta.qualifiers,...(requirements.qualifiers||[])].every(q=>other.qualifiers.includes(q))&&(!meta.storage||!other.storage||meta.storage===other.storage)&&
         // Do not compare a known pack size with an unknown/incompatible one.

@@ -50,7 +50,7 @@ test('the first recipe request avoids serial lookup calls and ingredient names c
   assert.equal(body.tool_choice,'none');
   return Response.json({output:output({inScope:true,recipe:{title:'Chicken',servings:2,minutes:20,steps:['Cook the chicken.'],revisesRecipe:null},items:[{id:null,name:'Chicken Escalope, 1kg',catalogQuery:'chicken',amount:'200 g',grams:200}],answer:'',showNutrition:false})});
  };
- try{const reply=await replyFor('Help me cook chicken');assert.equal(reply.mode,'ai');assert.equal(reply.card.items[0].id,'132490');assert.equal(calls,2);assert.equal(reply.products[0].available,true);}finally{globalThis.fetch=previous;}
+ try{const reply=await replyFor('Help me cook chicken');assert.equal(reply.mode,'ai');assert.equal(reply.card.items[0].id,'5860999');assert.equal(calls,2);assert.equal(reply.products[0].available,true);}finally{globalThis.fetch=previous;}
 });
 
 test('unlisted ingredient varieties remain distinct and planning receives clearly marked available alternatives',async()=>{
@@ -123,24 +123,24 @@ test('small Arabic-script remainders in Arabizi do not discard an otherwise vali
 test('an unconstrained recipe can revise an unmatched form using an available product of the same food family',async()=>{
  const previous=fetch;let revisions=0;
  globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);
-  if(body.text.format.name==='shopping_scope')return Response.json({output:output(decision('en',{intent:'recipe',englishRequest:'A chicken meal',queries:['chicken breast']}))});
+  if(body.text.format.name==='shopping_scope')return Response.json({output:output(decision('en',{intent:'recipe',englishRequest:'A chicken meal',queries:['chicken thigh']}))});
   if(body.text.format.name==='recipe_product_matching')return Response.json({output:output({matches:[]})});
   const revision=JSON.parse(body.input[0].content).serverRecipeRevision;
   if(revision){revisions++;assert.equal(body.tool_choice,'none');assert.equal(revision.unmatched[0].requiredFamily,'chicken');assert.ok(revision.unmatched[0].choices.every(p=>p.available));}
-  return Response.json({output:output({inScope:true,recipe:{title:'Chicken meal',servings:2,minutes:30,steps:[revision?'Remove the bones from the whole chicken, then cook its meat.':'Cook the chicken breast.'],revisesRecipe:null},items:[{id:revision?'136033':null,name:revision?'Whole chicken':'Chicken breast',catalogQuery:revision?'whole chicken':'chicken breast',amount:'500 g',grams:500}],answer:revision?'Use boneless meat from a whole chicken for this version.':'',showNutrition:false})});
+  return Response.json({output:output({inScope:true,recipe:{title:'Chicken meal',servings:2,minutes:30,steps:[revision?'Cut the chicken breast fillet into cubes and cook.':'Cook the chicken thighs.'],revisesRecipe:null},items:[{id:revision?'5860999':null,name:revision?'Chicken breast':'Chicken thigh',catalogQuery:revision?'chicken breast':'chicken thigh',amount:'500 g',grams:500}],answer:revision?'Use chicken breast fillets for this version.':'',showNutrition:false})});
  };
- try{const result=await replyFor('Help me cook a chicken meal');assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,'136033',JSON.stringify({revisions,result}));assert.match(result.card.steps[0],/Remove the bones/);assert.equal(revisions,1);assert.equal(result.recipeRevision.status,'applied');}finally{globalThis.fetch=previous;}
+ try{const result=await replyFor('Help me cook a chicken meal');assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,'5860999',JSON.stringify({revisions,result}));assert.match(result.card.steps[0],/Cut the chicken breast fillet/);assert.equal(revisions,1);assert.equal(result.recipeRevision.status,'applied');}finally{globalThis.fetch=previous;}
 });
 
 test('explicit ingredient forms and dietary constraints are never relaxed to fill a recipe card',async()=>{
  const previous=fetch;let revisions=0;
  globalThis.fetch=async(_url,options)=>{const body=JSON.parse(options.body);
-  if(body.text.format.name==='shopping_scope')return Response.json({output:output(decision('en',{intent:'recipe',englishRequest:'Use chicken breast only',queries:['chicken breast']}))});
+  if(body.text.format.name==='shopping_scope')return Response.json({output:output(decision('en',{intent:'recipe',englishRequest:'Use chicken thighs only',queries:['chicken thigh']}))});
   if(body.text.format.name==='recipe_product_matching')return Response.json({output:output({matches:[]})});
   if(JSON.parse(body.input[0].content).serverRecipeRevision)revisions++;
-  return Response.json({output:output({inScope:true,recipe:{title:'Chicken',servings:2,minutes:20,steps:['Cook the breast.'],revisesRecipe:null},items:[{id:null,name:'Chicken breast',catalogQuery:'chicken breast',amount:'500 g',grams:500}],answer:'',showNutrition:false})});
+  return Response.json({output:output({inScope:true,recipe:{title:'Chicken',servings:2,minutes:20,steps:['Cook the thighs.'],revisesRecipe:null},items:[{id:null,name:'Chicken thigh',catalogQuery:'chicken thigh',amount:'500 g',grams:500}],answer:'',showNutrition:false})});
  };
- try{for(const message of ['Use chicken breast only, no other cuts','I have a peanut allergy and need a chicken meal']){const result=await replyFor(message);assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,null);assert.equal(revisions,0);}}finally{globalThis.fetch=previous;}
+ try{for(const message of ['Use chicken thighs only, no other cuts','I have a peanut allergy and need a chicken meal']){const result=await replyFor(message);assert.equal(result.mode,'ai');assert.equal(result.card.items[0].id,null);assert.equal(revisions,0);}}finally{globalThis.fetch=previous;}
 });
 
 test('clear recipe plans recover an unnecessary follow-up or mistaken refusal within the first request',async()=>{

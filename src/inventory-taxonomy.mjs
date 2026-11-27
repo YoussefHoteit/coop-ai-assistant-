@@ -1,10 +1,18 @@
+import { createProteinClassification } from './protein-classification.mjs';
 // Search metadata only. Original names, IDs, prices, stock and label facts remain authoritative.
 export function createProductTaxonomy(products, categoryLabels = {}, normalize) {
   const originalNormalize=normalize;
   normalize=value=>originalNormalize(value).replace(/(?<!\d)\.|\.(?!\d)/g,' ').replace(/\s+/g,' ').trim();
+  const proteinClassification=createProteinClassification(products,normalize);
   const foodDepartments = new Set(['pantry','produce','frozen','dairy','meat','fish','bakery','organic','ready','snacks','beverages','coffee-tea']);
   const defs = [];
   const define = (type, aliases, departments, exclude = '') => defs.push({type,aliases:aliases.split('|').map(normalize).filter(Boolean),departments:departments.split(','),exclude:exclude && new RegExp(exclude)});
+  // Product identity requires evidence from the primary department and source
+  // aisle, rather than treating a flavour, filling or incidental word as a SKU type.
+  const identity = (type, aliases, departments, {aisles=[],exclude='',parent=null}={}) => {
+    define(type,aliases,departments,exclude);
+    Object.assign(defs.at(-1),{identity:true,aisles:aisles.map(normalize),parent});
+  };
   const staples='pantry,organic';
   define('lentils','lentils|lentil|lentilles|adass|adas|3adas|عدس',staples,'soup|chips|flour');
   define('chickpeas','chickpeas|chickpea|pois chiches|hommos hab|حمص حب|7ommos',staples,'soup|chips|flour|tahini');
@@ -57,6 +65,24 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   define('chicken','chicken|poulet|دجاج|فروج','meat,frozen','sausage|mortadella|burger|nugget|ring|liver|soup|pizza');
   define('beef','beef|boeuf|لحم بقر','meat,frozen','sausage|mortadella|burger|soup');
   define('lamb','lamb|sheep|agneau|غنم','meat');define('shrimp','shrimp|crevette|روبيان|قريدس','fish,frozen');
+  const meatAisles=['Meat','Chicken','Meat & Chicken','Cold Cuts','Cans & Jars'];
+  const seafoodAisles=['Fish & Shrimp','Fresh Fish','Fish','Cans & Jars'];
+  const unrelatedFood='\\b(?:sandwich(?:es)?|pizza|soup|stock|broth|seasoning|flavou?r(?:ed)?|bread|buns?|rolls?|chips|crackers?|biscuits?|treats?|pet food|dog food|cat food)\\b';
+  const meatIdentity=(type,aliases,exclude='')=>identity(type,aliases,'meat,frozen,pantry',{
+    aisles:meatAisles,exclude:[unrelatedFood,exclude].filter(Boolean).join('|')});
+  meatIdentity('turkey','turkey|dinde|habash|7abash|حبش|ديك رومي');
+  meatIdentity('hot dog','hot dog|hot dogs|hotdog|hotdogs|frankfurter|frankfurters|هوت دوغ|هوت دوج');
+  meatIdentity('sausage','sausage|sausages|saucisse|saucisses|سجق|نقانق');
+  meatIdentity('mortadella','mortadella|mortadela|martdella|mortadelle|مرتديلا|مرتادلا');
+  meatIdentity('salami','salami|salame|سلامي');
+  meatIdentity('pepperoni','pepperoni|بيبروني');
+  meatIdentity('bacon','bacon|بيكون');
+  meatIdentity('ham','ham|jambon|هام');
+  for(const[type,aliases]of[
+    ['tuna','tuna|thon|تونا|تونة'],['salmon','salmon|saumon|سلمون'],
+    ['sardines','sardine|sardines|سردين'],['mackerel','mackerel|maquereau|ماكريل'],['anchovies','anchovy|anchovies|anchois|أنشوجة'],
+  ])identity(type,aliases,'fish,frozen,pantry',{aisles:seafoodAisles,exclude:unrelatedFood+'|\\b(?:salad|sauce|spread)\\b'});
+  identity('hot dog bun','hot dog bread|hot dog bun|hot dog buns|hotdog bread|hotdog bun|hotdog buns|pain hot dog|خبز هوت دوغ|خبز هوت دوج','bakery',{parent:'bread'});
   for(const[type,aliases,departments]of[
     ['bread','bread|pain|خبز','bakery'],['shampoo','shampoo|shampoing|شامبو','personal-care,baby'],['toothpaste','toothpaste|dentifrice|معجون اسنان','personal-care'],
     ['deodorant','deodorant|antiperspirant|مزيل عرق','personal-care'],['laundry detergent','laundry|lessive|detergent|مسحوق غسيل','home-care'],
@@ -86,32 +112,44 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
   const forms=[['shredded',/\b(?:shredded|shred|rapp?e|grated)\b/],['sliced',/\b(?:slices?|sliced|tranches?)\b/],['block',/\b(?:blocks?|bloc)\b/]];
   attributes.push(...forms);
   attributes.push(['yellow',/\byellow\b|\bjaune\b|\bsafra\b|\basfar\b|اصفر|صفراء/]);
-  attributes.push(['breast',/\bbreasts?\b|\bpoitrine\b|صدر|\bsader\b|\bsadr\b/]);
+  attributes.push(['breast',/\bbreasts?\b|\bpoitrine\b|\bpechuga\b|صدر|\bsader\b|\bsadr\b/]);
   for(const flavor of ['orange','apple','lemon','strawberry','vanilla','mint','coconut','almond','peach','pineapple','cherry'])attributes.push([flavor,new RegExp('\\b'+flavor+'\\b')]);
   attributes.push(['full-fat',/full fat|full cream|whole milk/],['low-fat',/low fat|semi skim/],['skimmed',/skimmed|zero fat|\b0\s*%/]);
   const departments=new Set(Object.keys(categoryLabels));
   const brands=[...new Set(products.map(p=>normalize(p.brand||'')).filter(Boolean))].sort((a,b)=>b.length-a.length);
-  const classifyName=(text,keys)=>defs.filter(d=>d.departments.some(k=>keys.includes(k))&&(!d.exclude||!d.exclude.test(text))&&d.aliases.some(t=>whole(text,t)))
-    .sort((a,b)=>Math.max(...b.aliases.filter(t=>whole(text,t)).map(t=>t.length))-Math.max(...a.aliases.filter(t=>whole(text,t)).map(t=>t.length)))[0];
+  const classifyName=(text,keys,aisles)=>defs.filter(d=>{
+    const department=d.identity?d.departments.includes(keys[0]):d.departments.some(k=>keys.includes(k));
+    const aisle=!d.identity||!d.aisles.length||!aisles.length||d.aisles.some(a=>aisles.includes(a));
+    return department&&aisle&&(!d.exclude||!d.exclude.test(text))&&d.aliases.some(t=>whole(text,t));
+  }).sort((a,b)=>Number(Boolean(b.identity))-Number(Boolean(a.identity))||Math.max(...b.aliases.filter(t=>whole(text,t)).map(t=>t.length))-Math.max(...a.aliases.filter(t=>whole(text,t)).map(t=>t.length)));
   const records=new Map();
   for(const product of products){
     const name=normalize(product.name.en), keys=[product.category,...(product.additionalCategories||[])];
-    let definition=classifyName(name,keys)||(
+    const aisleLabels=[...new Set((product.subcategory||'').split(',').map(x=>x.trim()).filter(x=>x&&!Object.values(categoryLabels).some(labels=>labels.includes(x))&&!/offer|promotion|christmas|buy.*win|\$|back to school/i.test(x)))].sort();
+    const definitions=classifyName(name,keys,aisleLabels.map(normalize));
+    const protein=proteinClassification.classify(product);
+    let definition=definitions[0]||(
       keys.includes('pantry')&&/pasta.*noodle/i.test(product.subcategory||'')&&!/sauce|pesto|instant|soup|cup|noodle|funghi/.test(name)?defs.find(d=>d.type==='pasta'):null);
+    // A species-specific aisle plus a compatible named cut is stronger
+    // evidence than requiring every supplier to repeat the species in its name.
+    if(protein?.preparation==='raw')definition=defs.find(d=>d.type===protein.species)||definition;
     let confidence=definition?'type-rule':'source-name';
     if(!definition){const leaf=aisleTypes.find(([label,,depts])=>depts.split(',').some(k=>keys.includes(k))&&(product.subcategory||'').split(',').some(s=>normalize(s)===normalize(label)));if(leaf){definition=defs.find(d=>d.type===leaf[1]);confidence='aisle-rule';}}
     const brand=normalize(product.brand||'')||brands.find(b=>name.startsWith(b+' '))||'';
-    const aisleLabels=[...new Set((product.subcategory||'').split(',').map(x=>x.trim()).filter(x=>x&&!Object.values(categoryLabels).some(labels=>labels.includes(x))&&!/offer|promotion|christmas|buy.*win|\$|back to school/i.test(x)))].sort();
     const generic=name.replace(brand&&name.startsWith(brand+' ')?brand:'\0','').replace(/\b\d+(?:\.\d+)?\s*(?:kg|gr|g|ml|cl|l|lb|oz|pcs|packs?)\b/g,' ').replace(/\b\d+\b/g,' ').replace(/\s+/g,' ').trim();
     const productType=definition?.type||generic||name;
     const spice=keys.includes('pantry')&&/herbs.*spices/i.test(product.subcategory||'');
     const dryGrain=keys.some(k=>['pantry','organic'].includes(k))&&/rice|grains.*seeds/i.test(product.subcategory||'')&&!/canned|can |jar /i.test(name);
-    const storage=/frozen|\bfrz\b/.test(name)||keys.includes('frozen')?'frozen':/\bdry\b|\bdried\b/.test(name)||spice||dryGrain?'dry':keys.includes('produce')?'fresh':null;
+    const storage=protein?.storage||(/frozen|\bfrz\b/.test(name)||keys.includes('frozen')?'frozen':/\bdry\b|\bdried\b/.test(name)||spice||dryGrain?'dry':keys.includes('produce')?'fresh':null);
     const attrs=attributes.filter(([,rx])=>rx.test(name)).map(([tag])=>tag);
+    if(protein?.cut==='breast'&&protein.species==='chicken'&&!attrs.includes('breast'))attrs.push('breast');
     const dietary=qualifiers.filter(([,rx])=>rx.test(name)).map(([tag])=>tag);
     const familyKey=(foodDepartments.has(product.category)?'food:':'retail:')+productType;
+    const identities=definitions.filter(d=>d.identity).flatMap(d=>[d.type,...(d.parent?[d.parent]:[])]);
+    if(protein)identities.push(protein.species);
+    const proteinTerms=protein?[protein.species,protein.cut,protein.cut==='breast'?'fillet':null,protein.preparation==='raw'?'raw':null,protein.boneless?'boneless':null,protein.storage].filter(Boolean):[];
     records.set(product.id,{department:product.category,aisles:aisleLabels,productType,familyKey,variantKey:[familyKey,brand,...attrs,...dietary].join('|'),brand:product.brand||brand||null,
-      brandKey:brand||null,storage,attributes:attrs,qualifiers:dietary,size:product.size.en,confidence,searchTerms:definition?.aliases||[],edible:foodDepartments.has(product.category)});
+      brandKey:brand||null,storage,protein,attributes:attrs,qualifiers:dietary,size:product.size.en,confidence,identityTypes:[...new Set(identities)],searchTerms:[...new Set([...(definition?.aliases||[]),...definitions.filter(d=>d.identity).flatMap(d=>d.aliases),...proteinTerms])],edible:foodDepartments.has(product.category)});
   }
   // Learn unambiguous raw-ingredient terms and spelling variants from the retailer's own names.
   // These groups contain no recipes or hand-picked dish routes.
@@ -163,7 +201,16 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     const text=normalize(query);
     if(queryCache.has(text))return queryCache.get(text);
     const types=defs.filter(d=>d.aliases.some(t=>whole(text,t))).map(d=>d.type);
-    const longest=defs.flatMap(d=>d.aliases.filter(t=>whole(text,t)).map(t=>({type:d.type,length:t.length}))).sort((a,b)=>b.length-a.length)[0];
+    const matched=defs.flatMap(d=>d.aliases.filter(t=>whole(text,t)).map(t=>({type:d.type,length:t.length,identity:d.identity,alias:t}))).sort((a,b)=>b.length-a.length);
+    const semantic=matched.find(m=>m.identity);
+    // Explicit composite heads take priority over an incidental ingredient.
+    // A hot dog bun is a separate identity; turkey cat food is still cat food.
+    const head=semantic&&matched.find(m=>['dog food','cat food','sandwich'].includes(m.type));
+    const parsedProtein=proteinClassification.query(text);
+    // Compound identities (chicken hot dogs, turkey cat food) take priority;
+    // otherwise a verified species/cut phrase uses the shared protein metadata.
+    const protein=(!head&&(!semantic||semantic.type===parsedProtein?.species))?parsedProtein:null;
+    const longest=head||semantic||matched[0];
     const attrs=attributes.filter(([,rx])=>rx.test(text)).map(([tag])=>tag);
     const requestedBrands=brands.filter(b=>b.length>=3&&!['fresh','organic','produce','frozen','rice','milk','chicken','cream','cheese','water','meat','bakery','coffee','tea','food','happy'].includes(b)&&whole(text,b));
     let residue=text;
@@ -172,21 +219,26 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     for(const [,pattern] of [...attributes,...qualifiers]) residue=residue.replace(pattern,' ').trim();
     residue=residue.replace(/\b(?:and|or|ou|the|a|an|of|for|about|plain|regular|all purpose|wheat|white|brown|red|green|black|fresh|frozen|dry|dried|ground|whole|split|chopped|finely|roughly|diced|sliced|peeled|grated|minced|freshly|seeds?|leaves|powder|to taste|gluten free|lactose free|unsalted|organic|vegan|basmati|long grain|short grain|coarse|fine|cooking|heavy|whipping|g|kg|ml|l)\b|\d+/g,'').replace(/\s+/g,'').trim();
     residue=residue.replace(/ناشفه|ناشف|مجفف|جاف|مطحون|طازج|مفروم|مقطع|كامل|احمر|اخضر|ابيض|اسمر|\b(?:secs?|seche|seches|moulu|moulue|entier|entiere|frais|fraiche|rouge|vert|blanc)\b|او/g,'').trim();
-    residue=residue.replace(/^(?:yellow|jaune|safra|asfar|اصفر|صفراء|breasts?|poitrine|صدر|sader|sadr)$/,'');
+    residue=residue.replace(/^(?:yellow|jaune|safra|asfar|اصفر|صفراء|breasts?|poitrine|pechuga|صدر|sader|sadr)$/,'');
     for(const [,pattern] of qualifiers) residue=residue.replace(pattern,'');
     const aliasSafe=!residue;
-    const info={text,types:[...new Set(aliasSafe?(longest?[longest.type]:types):[])],attributes:attrs,qualifiers:qualifiers.filter(([,rx])=>rx.test(text)).map(([tag])=>tag),brands:requestedBrands,storage:/\bdry\b|\bdried\b|ناشف|ناشفه|مجفف/.test(text)?'dry':/frozen|مجمد/.test(text)?'frozen':/\bfresh\b|طازج/.test(text)?'fresh':null,
-      aliases:aliasSafe?defs.filter(d=>d.type===longest?.type).flatMap(d=>d.aliases):[]};
+    const identityConstrained=Boolean(semantic&&longest)||Boolean(protein);
+    const info={text,types:[...new Set(aliasSafe||identityConstrained?(longest?[longest.type]:types):[])],attributes:attrs,qualifiers:qualifiers.filter(([,rx])=>rx.test(text)).map(([tag])=>tag),brands:requestedBrands,storage:/\bdry\b|\bdried\b|ناشف|ناشفه|مجفف/.test(text)?'dry':/frozen|مجمد/.test(text)?'frozen':/\bfresh\b|طازج/.test(text)?'fresh':null,
+      identityConstrained,aliases:aliasSafe?defs.filter(d=>d.type===longest?.type).flatMap(d=>d.aliases):[]};
+    if(protein){info.protein=protein;info.types=[protein.species];}
     if(queryCache.size>=512)queryCache.delete(queryCache.keys().next().value);
     queryCache.set(text,info);return info;
   }
   const opposite={red:['brown','green','white'],brown:['red','white'],green:['red','white'],white:['red','brown','green'],split:['whole'],whole:['split'],ground:['leaves'],leaves:['ground'],coarse:['fine'],fine:['coarse'],'full-fat':['low-fat','skimmed'],'low-fat':['full-fat','skimmed'],skimmed:['full-fat','low-fat']};
   opposite.yellow=['red','brown','green','white'];
   for(const color of opposite.yellow)opposite[color].push('yellow');
+  const identityTypeSet=new Set(defs.filter(d=>d.identity).map(d=>d.type));
+  const matchesType=(meta,type)=>Boolean(meta)&&(identityTypeSet.has(type)?meta.identityTypes.includes(type):meta.productType===type||meta.identityTypes.includes(type));
   function compatible(query,product){
     const info=typeof query==='string'?queryInfo(query):query, meta=records.get(product.id);
     if(!meta)return false;
-    if(info.types.length&&!info.types.includes(meta.productType))return false;
+    if(info.protein&&!proteinClassification.compatible(info.protein,meta.protein))return false;
+    if(info.types.length&&!info.types.some(type=>matchesType(meta,type)))return false;
     if(info.brands?.length&&!info.brands.includes(meta.brandKey)&&!info.brands.some(b=>whole(normalize(product.name.en),b)))return false;
     if(info.storage&&meta.storage&&info.storage!==meta.storage)return false;
     if(info.qualifiers.some(q=>!meta.qualifiers.includes(q)))return false;
@@ -209,7 +261,7 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
       if(differentBrand&&(!original.brandKey||!m.brandKey||m.brandKey===original.brandKey))return false;
       if(!differentBrand&&original.brandKey&&m.brandKey!==original.brandKey)return false;
       if(!differentBrand&&normalize(m.size)===normalize(original.size))return false;
-      return original.qualifiers.every(q=>m.qualifiers.includes(q))&&original.attributes.every(a=>m.attributes.includes(a))&&(!original.storage||m.storage===original.storage);
+      return original.qualifiers.every(q=>m.qualifiers.includes(q))&&original.attributes.every(a=>m.attributes.includes(a))&&(!original.storage||m.storage===original.storage)&&(!original.protein||m.protein?.species===original.protein.species&&m.protein.cut===original.protein.cut&&m.protein.preparation===original.protein.preparation&&m.protein.form===original.protein.form);
     }).sort((a,b)=>Number(b.available===true)-Number(a.available===true)||(a.price??Infinity)-(b.price??Infinity)).slice(0,Math.min(30,limit));
   }
   const families=new Map();for(const [id,m]of records){if(!families.has(m.familyKey))families.set(m.familyKey,[]);families.get(m.familyKey).push(id);}
@@ -218,5 +270,5 @@ export function createProductTaxonomy(products, categoryLabels = {}, normalize) 
     return {productCount:records.size,departments:count('department'),aisles:count('aisles'),productTypes:count('productType'),familyCount:families.size,
       typedProducts:[...records.values()].filter(m=>m.confidence!=='source-name').length,unbranded:[...records.values()].filter(m=>!m.brandKey).length};
   }
-  return{records,queryInfo,canonicalQuery,compatible,alternatives,facets};
+  return{records,queryInfo,canonicalQuery,compatible,matchesType,alternatives,facets};
 }

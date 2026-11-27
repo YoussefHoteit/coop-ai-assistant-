@@ -86,8 +86,12 @@ export function createInventorySearch(products, categoryLabels, normalize) {
     const query = taxonomy.canonicalQuery(input);
     const queryInfo = taxonomy.queryInfo(query);
     const categoryIds=!queryInfo.types.length&&sourceCategories.get(categoryKey(query));
-    const queryWords = wordsOf(query);
+    const queryWords = wordsOf(query).filter(word=>!queryInfo.identityConstrained||!['in','with','of','for','de','du','avec'].includes(word));
     const queryVariants = [...new Set([...(variants.get(query) || variants.get(singular(query)) || [query]),...queryInfo.aliases])];
+    // Pet care is a distinct shopping domain. A name containing a food flavour
+    // is not evidence that a shopper requested pet food. This also protects
+    // unknown/unclassified food terms without adding a rule for every ingredient.
+    const petContext=category==='pets'||queryInfo.types.some(type=>['cat food','dog food','pet accessories'].includes(type))||/\b(?:pets?|cats?|dogs?|kitten|kittens|puppy|puppies|litter|kibble|croquettes|chiens?|chats?|chiots?|chatons?|animaux|hamster|hamsters)\b|قطط|كلاب|حيوانات|بسة|بسس|كلب|قطط|bsaynet|kleb/i.test(query);
     return indexed.filter(entry => !category || entry.categoryKeys.includes(category) ||
       (category === 'offers' && entry.product.promotion === true)).map(entry => {
       if (!query) return { entry, score: 1 };
@@ -95,6 +99,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       if (entry.identifiers.includes(query)) return { entry, score: 9000 };
       if(categoryIds)return {entry,score:categoryIds.has(entry.product.id)?1500:0};
       const meta = taxonomy.records.get(entry.product.id);
+      if(meta.department==='pets'&&!petContext&&!(meta.brandKey&&(' '+query+' ').includes(' '+meta.brandKey+' '))&&entry.name!==query)return {entry,score:0};
       if ((queryInfo.types.length || queryInfo.qualifiers.length || queryInfo.brands.length) && !taxonomy.compatible(queryInfo,entry.product)) return {entry,score:0};
       // An alias for the general commodity cannot satisfy an explicit variety.
       const requiredAttributes=queryInfo.attributes.filter(attribute=>attribute!=='whole'||!queryInfo.qualifiers.includes('whole-wheat'));
@@ -102,8 +107,10 @@ export function createInventorySearch(products, categoryLabels, normalize) {
       if(queryInfo.types.length && requiredAttributes.some(attribute=>!meta.attributes.includes(attribute)&&!(alternativeColours&&['red','brown','green','white','yellow'].includes(attribute))))return {entry,score:0};
       // A typed, unqualified family lookup is a metadata lookup, not a literal
       // substring filter. Explicit pack sizes still require a name/size match.
-      if(queryInfo.types.includes(meta.productType)&&!queryInfo.brands.length&&!/\d/.test(query)&&meta.confidence!=='source-name'&&queryInfo.aliases.includes(query))return {entry,score:1800};
-      if (entry.names.includes(query)) return { entry, score: 1000 + Number(meta.confidence!=='source-name'&&queryInfo.types.includes(meta.productType))*800 };
+      const typed=queryInfo.types.some(type=>taxonomy.matchesType(meta,type));
+      if(typed&&queryInfo.protein?.metadataOnly&&!queryInfo.brands.length&&(!/\d/.test(query)||queryInfo.protein.packWeight))return {entry,score:1900+Number(meta.protein?.preparation==='raw')*100};
+      if(typed&&!queryInfo.brands.length&&!/\d/.test(query)&&meta.confidence!=='source-name'&&queryInfo.aliases.includes(query))return {entry,score:1800};
+      if (entry.names.includes(query)) return { entry, score: 1000 + Number(meta.confidence!=='source-name'&&typed)*800 };
       let score = 0;
       if (queryVariants.some(term => entry.names.some(name => (' ' + name + ' ').includes(' ' + term + ' ')))) score = 500;
       if (!score) {
@@ -114,7 +121,7 @@ export function createInventorySearch(products, categoryLabels, normalize) {
         }));
         if (hits.length && hits.every(Boolean)) score = 100 + queryWords.filter(word => entry.nameTokens.has(singular(word))).length * 5;
       }
-      if (score && meta.confidence!=='source-name' && queryInfo.types.includes(meta.productType)) score += 800 + queryInfo.attributes.filter(a=>meta.attributes.includes(a)).length*30;
+      if (score && meta.confidence!=='source-name' && typed) score += 800 + queryInfo.attributes.filter(a=>meta.attributes.includes(a)).length*30;
       return { entry, score };
     }).filter(result => result.score > 0)
       .sort((a, b) => b.score - a.score || Number(b.entry.product.available === true) - Number(a.entry.product.available === true) ||

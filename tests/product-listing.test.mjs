@@ -17,6 +17,78 @@ function turn(history,message,reply){
   return [...history,{role:'user',content:message},{role:'assistant',content:(summary?JSON.stringify(summary)+'\n':'')+reply.text}];
 }
 
+test('product identities distinguish the actual item from flavours, fillings and accessories',()=>{
+  const turkey=['5861408','5861404','136024','131957','136026','163053','131421'];
+  const french=data.products.find(p=>/La Piara mrtd dinde/i.test(p.name.en));
+  assert.ok(french?.available);turkey.push(french.id);
+  const expectedDogs=data.products.filter(p=>p.available&&p.category==='pantry'&&/\b(?:hot ?dogs?|frankfurters?)\b/i.test(p.name.en));
+  assert.equal(expectedDogs.length,5);
+  for(const q of ['turkey','dinde','7abash','حبش'])assert.deepEqual(ids(stocked(q)),turkey.sort(),q);
+  for(const q of ['hot dog','hot dogs','hotdog','frankfurters','هوت دوغ'])assert.deepEqual(ids(stocked(q)),ids(expectedDogs),q);
+  assert.ok(search('turkey breast').some(p=>p.id==='163053'));
+  assert.deepEqual(ids(stocked('hot dog bread')),['58467']);
+  assert.deepEqual(ids(stocked('hot dog bun')),['58467']);
+  assert.ok(stocked('bread').some(p=>p.id==='58467'));
+  assert.equal(stocked('beef hot dog').length,3);
+  assert.equal(stocked('chicken hot dog').length,2);
+  assert.ok(search('turkey sandwich').every(p=>p.category==='ready'));
+  const catTurkey=stocked('turkey cat food');assert.equal(catTurkey.length,7);assert.ok(catTurkey.every(p=>p.category==='pets'));
+  assert.deepEqual(ids(stocked('dog food with turkey')),['57985']);
+  // The shared rule applies to other actual product identities too.
+  for(const term of ['salmon','tuna','sardines','sausage','mortadella','pepperoni']){
+    const matches=stocked(term);assert.ok(matches.length,term);
+    assert.ok(matches.every(p=>['fish','frozen','meat','pantry'].includes(p.category)),term);
+    assert.ok(matches.every(p=>search.taxonomy.records.get(p.id).identityTypes.includes(term)),term);
+  }
+  assert.ok(stocked('tuna in water').length>1);
+  assert.ok(stocked('tuna in water').every(p=>/water/i.test(p.name.en)&&p.category==='pantry'));
+  assert.ok(stocked('veal').every(p=>p.category!=='pets'));
+  assert.ok(stocked('liver').every(p=>p.category!=='pets'));
+  assert.ok(stocked('friskies').length>1);
+});
+
+test('the same identity rules classify new inventory records by primary department and aisle',()=>{
+  const fixture=(id,name,category,subcategory,additionalCategories=[])=>({id,name:{en:name,ar:name},size:{en:'200g',ar:'200g'},category,subcategory,additionalCategories,available:true,price:1});
+  const items=[
+    fixture('1','Turkey breast','meat','Cold Cuts'),
+    fixture('2','Turkey chunks in gravy','pets','Cat Food',['meat']),
+    fixture('3','Turkey sandwich','ready','Sandwiches'),
+    fixture('4','Hot dog','pantry','Cans & Jars'),
+    fixture('5','Hot dog bread','bakery','Bread',['pantry']),
+    fixture('6','Hot dog flavour crisps','snacks','Chips & Crackers',['pantry']),
+    fixture('7','Turkey flavoured seasoning','pantry','Herbs & Spices'),
+    fixture('8','Salmon fillet','fish','Fresh Fish'),
+    fixture('9','Salmon dog food','pets','Dog Food',['fish']),
+    fixture('10','Salmon sandwich','ready','Sandwiches'),
+    fixture('11','Duck and rice','pets','Dog Food'),
+    fixture('12','Frankfurters','pantry','Cans & Jars'),
+  ];
+  const find=createInventorySearch(items,data.categories,normalize);
+  assert.deepEqual(ids(find('turkey')),['1']);
+  assert.deepEqual(ids(find('hot dog')),['12','4']);
+  assert.deepEqual(ids(find('hot dog bread')),['5']);
+  assert.deepEqual(ids(find('salmon')),['8']);
+  assert.deepEqual(ids(find('turkey sandwich')),['3']);
+  assert.deepEqual(ids(find('salmon dog food')),['9']);
+  assert.deepEqual(ids(find('duck')),[]);
+  assert.deepEqual(ids(find('duck','pets')),['11']);
+});
+
+test('chat type listings and cheapest follow-ups keep a verified identity across turns',async()=>{
+  const original=globalThis.fetch;globalThis.fetch=async()=>{throw Error('Direct identity searches must not use a model');};
+  try{
+    for(const [q,term] of [['Do you have turkey?','turkey'],['List all available hot dogs','hot dogs'],['Do you have hot dog bread?','hot dog bread'],['What options do you have for salmon?','salmon'],['Do you have turkey cat food?','turkey cat food']]){
+      const expected=stocked(term);assert.ok(expected.length);
+      const first=await chat(q);assert.equal(first.card?.kind,'products',q);assert.deepEqual(ids(first.products),ids(expected),q);
+      const history=turn([],q,first);
+      const cheapest=await chat('what is the cheapest option',history);assert.ok(cheapest.products.length,q);
+      assert.ok(cheapest.products.every(p=>expected.some(item=>item.id===p.id)&&p.price===Math.min(...expected.map(p=>p.price))),q);
+      const all=await chat('list all available options',turn(history,'what is the cheapest option',cheapest));
+      assert.deepEqual(ids(all.products),ids(expected),q);
+    }
+  }finally{globalThis.fetch=original;}
+});
+
 test('metadata retrieves every mozzarella spelling, independent of customer spelling or punctuation',()=>{
   const raw=data.products.filter(p=>p.category==='dairy'&&p.available===true&&/mo(?:zz|z)arell?a/i.test(p.name.en));
   assert.equal(raw.length,20);

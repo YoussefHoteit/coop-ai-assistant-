@@ -337,7 +337,7 @@ function productListingTerm(text) {
   return null;
 }
 
-function literalProductReply(input, lang) {
+function literalProductReply(input, lang, history=[]) {
   const text=normalize(input);
   const availability=/^(?:do you (?:have|sell|stock)|avez vous|vendez vous|3andkon|3andkun|عندكن|عندكم|هل لديكم|هل عندكم|في عندكم) (.+)$/u;
   const price=/^(?:what is (?:the )?price of|how much is|price of|quel est le prix de|combien coute|adde se3er|2adde se3er|bkam|كم سعر|شو سعر|قديش سعر) (.+)$/u;
@@ -347,18 +347,26 @@ function literalProductReply(input, lang) {
   const arabiziExtremes=/^(?:baddi |badde |shou |shu )?(ar5as|arkhas|aghla) (.+)$/u;
   const arabiziChoice=/^(?:baddi|badde) (.+?) (?:shou|shu) (ar5as|arkhas|aghla) (?:wahad|wa7ad|we7ed|option)$/u;
   let query,lookupKind,pricePreference='standard',comparisonBasis='pack';
-  const stock=availability.exec(text),listed=price.exec(text),typeTerm=productTypeTerm(text),listing=productListingTerm(text);
+  const stock=availability.exec(text)||/^what (.+?) (?:do you have|are available)$/.exec(text)||/^(?:i want|i would like|i need) (.+)$/.exec(text),listed=price.exec(text),typeTerm=productTypeTerm(text),listing=productListingTerm(text);
   if(typeTerm||stock||listed||listing){query=typeTerm||listing||(stock||listed)[1];lookupKind=listed?'price':typeTerm||typeDiscoveryIntent(text)?'types':'availability';}
   else{
     const {core,basis}=comparisonBasisSuffix(text);
     const extreme=extremes.exec(core)||arabicExtremes.exec(core)||arabiziExtremes.exec(core);
     const reversed=frenchExtremes.exec(core)||arabiziChoice.exec(core);
-    if(!extreme&&!reversed)return null;
+    if(!extreme&&!reversed){
+      // A verified short product phrase is a complete inventory lookup, not
+      // a request for samples. Leave ambiguous dish names to cooking intent.
+      const term=cleanCatalogTerm(text),canonical=baseInventorySearch.retailCanonicalQuery(term),info=productTaxonomy.queryInfo(canonical);
+      const supported=info.protein?.metadataOnly||info.aliases.includes(canonical)||baseInventorySearch.hasSourceCategory(canonical);
+      if(!term||term.split(' ').length>7||!supported||!(/[?؟]\s*$/.test(input)||productHistoryGroup(history)))return null;
+      query=term;lookupKind='availability';
+    }else{
     query=extreme?extreme[2]:reversed[1];
     const direction=extreme?extreme[1]:reversed[2];
     lookupKind='comparison';
     pricePreference=/most expensive|highest priced|plus cher|اغلى|aghla/u.test(direction)?'premium':'cheapest';
     comparisonBasis=basis||'pack';
+    }
   }
   query=cleanCatalogTerm(query);
   if(!query||query.length>120)return null;
@@ -608,6 +616,7 @@ const scopeRules = [
   'Set lookupKind=types for a request asking what kinds, types, varieties or categories of a broad product family we carry. The server will summarize the stocked types and ask which one the shopper wants; do not return a list of individual SKUs before the shopper selects a type. Set lookupKind=availability for stock questions, requests for a chosen variety, product options, brands, or explicitly all available products. Use price for a simple listed-price question, comparison for numerical price ranking or lowest/highest price, and none for other tasks. The server retrieves ALL eligible options when a specific type is selected, not only examples in the chat. Translate misspellings and multilingual wording into the intended English product family or variety, not an arbitrary SKU. A named product family in the latest request overrides previously shown items. Return separate concise family queries for multiple requested products. For an unnamed follow-up asking for all options, reuse the previous comparisonContext queries rather than the last selected product. Preserve specifically requested brand, size, variety and dietary qualifiers. For comparison use kg, g100, ml100, litre, piece or pack according to the requested unit; default to pack. Never select direct lookup for instructions, descriptions, nutrition, qualitative comparisons, recipes, or requests combining another task.',
   "Set request.budgetUsd to the shopper's total spending limit in USD when explicitly stated, including English, Arabic, Arabizi and French amounts. Otherwise use null. A product unit price is not a total budget. Do not assume pantry items are already owned unless the shopper says so.",
   'Set request.intent=recipe for a clearly understood cooking request. If the dish itself or a critical requirement is genuinely ambiguous, use intent=clarify and ask a brief relevant question. Missing supplier matches do not make a recipe request ambiguous or out of scope.',
+  'Plan raw, unseasoned meat or seafood cuts for recipes that start with raw ingredients. Use the intended species and cut as the lookup (for example chicken breast), never a prepared SKU name such as escalope, crispy chicken, nuggets, cold cuts or marinated meat unless the shopper actually asks for that prepared form.',
   'You are a scope reviewer for Al Makhazen COOP’s customer shopping assistant.',
   'Allow shopping assistance for ALL merchandise sold by Al Makhazen COOP, its products and services, promotions, prices, availability, product comparisons, shopping budgets and lists, plus food preparation, recipes, storage, nutrition, labels and allergens. COOP is a multi-department retailer, not a food-only store. Allow brief greetings and genuine shopping follow-ups.',
   'Its catalog includes electronics and phone accessories (including car chargers), stationery and school supplies (pencils, pens, notebooks, backpacks and pencil cases), seasonal Christmas items and clothing such as socks, toys, kitchen accessories, household goods, personal care, baby care and pet supplies, as well as groceries. Asking whether COOP sells ANY retail product is an allowed inventory lookup even if that product is unfamiliar or ultimately absent from the catalog. Do not reject a shopping question because the item is not typical supermarket food.',
@@ -639,6 +648,7 @@ const rules = [
   'For a clearly understood recipe request, return a complete recipe card on this turn. Default to four servings if no count is given, and allow later adjustments. Do not ask the shopper to repeat the dish, add the word recipe, switch languages, or give a serving count before receiving a useful recipe. Ask a clarification only if the dish or a critical requirement is genuinely unclear. Keep unresolved ingredients for server matching rather than replacing the whole recipe with a stock question.',
   'If serverRecipeRevision is provided, keep the same requested dish, servings and explicit shopper constraints, and revise only the unmatched ingredient forms using the verified same-family alternatives. Adjust the preparation steps for the selected form and explain any meaningful preparation change. Never substitute an explicit ingredient variety, dietary requirement or brand without agreement. Use only exact real product IDs and do not claim an alternative is the original ingredient.',
   'For recipes, keep answer about the dish, useful preparation notes, explicit adaptations or budget. Do not narrate missing matches or uncertain stock just because an ingredient ID is null: the server resolves every ingredient afterwards and adds verified availability notes itself. Keep genuine allergy/label warnings when relevant.',
+  'Use the verified protein classification (species, cut and preparation) when matching raw ingredients. The Chicken aisle may list a breast as whole fillet without the word chicken. Never replace plain raw meat with a breaded, marinated, smoked, deli or otherwise prepared product; keep the intended raw cut in catalogQuery even if a matching product display name differs.',
   'For a recipe request the server resolves every generated ingredient against the full inventory after you reply. Use the supplied ingredient choices directly and do not repeat satisfied searches. A group marked relatedVarietiesOnly lists other available varieties, not exact matches for the original query. Preserve explicit shopper ingredient, allergy, dietary and brand constraints; ask before substituting those. For a dish request with no explicit ingredient constraint, write a suitable version using real available ingredient varieties and explain any meaningful adaptation. Do not infer an ingredient variety just from the appearance or color in a dish name. Never label a different variety as an exact match.',
   'You are the Al Makhazen COOP shopping assistant for its complete multi-department catalog. Follow the response language specified below for the entire reply, including recipe titles, steps, ingredients and quantities. Retain original brand names or foreign terms only when they clarify the answer.',
   'Keep the reply strictly within COOP shopping, all retail products and services, shopping lists, product bundles, recipes and food information. Electronics, car chargers, socks and seasonal clothing, stationery, pens, pencils, backpacks, pencil cases, toys, household goods, baby care, personal care and pet supplies are fully in scope. Product lookup requests remain in scope even when no matching product is found. Allow short greetings and relevant follow-ups.',
@@ -785,7 +795,7 @@ async function requestOpenAI(env, body, signal, onText) {
 
 function promptProduct(product) {
   const metadata=productTaxonomy.records.get(product.id);
-  return { ...product, classification: metadata && {type:metadata.productType,aisles:metadata.aisles,family:metadata.familyKey,form:metadata.storage,attributes:metadata.attributes,qualifiers:metadata.qualifiers,brandContext:metadata.brand} };
+  return { ...product, classification: metadata && {type:metadata.productType,aisles:metadata.aisles,family:metadata.familyKey,form:metadata.storage,protein:metadata.protein,attributes:metadata.attributes,qualifiers:metadata.qualifiers,brandContext:metadata.brand} };
 }
 
 const alternativeTool = {type:'function',name:'find_alternatives',strict:true,
@@ -849,7 +859,7 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const info=productTaxonomy.queryInfo(query);
     const exact=results.filter(p=>info.attributes.every(attribute=>productTaxonomy.records.get(p.id)?.attributes.includes(attribute)));
     if(exact.length)return{query,results:exact};
-    const related=info.types.length&&!info.qualifiers.length&&!info.brands.length?products.filter(p=>p.available===true&&info.types.includes(productTaxonomy.records.get(p.id)?.productType)).slice(0,4):results;
+    const related=info.types.length&&!info.qualifiers.length&&!info.brands.length?products.filter(p=>{const meta=productTaxonomy.records.get(p.id);return p.available===true&&info.types.includes(meta?.productType)&&(!info.protein||meta.protein?.species===info.protein.species&&meta.protein.preparation==='raw'&&!meta.protein.bundle);}).slice(0,4):results;
     return {query,relatedVarietiesOnly:true,results:related};
   }).filter(group=>group.results.length);
   const initialProducts=[...new Map(initialMatches.flatMap(group=>group.results).map(product=>[product.id,product])).values()];
@@ -970,7 +980,15 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
     const {items,showNutrition}=reply;
     if (typeof answer !== 'string' || !Array.isArray(items)) throw new Error('Invalid model output.');
     if (/(?:^|\n)[ \t]*(?:\x60{3}|~{3})/.test(answer)) return { text: messages[lang].scope };
-    const entries = items.slice(0, 20);
+    const entries = items.slice(0, 20).map(entry=>{
+      if(!recipe)return entry;
+      const draft=productTaxonomy.queryInfo(entry.catalogQuery||entry.name).protein;
+      const formExplicit=draft&&[input,...plannedQueries].some(q=>{const p=productTaxonomy.queryInfo(q).protein;return p?.species===draft.species&&p.form===draft.form;});
+      const intended=draft&&!formExplicit&&plannedQueries.find(q=>{const p=productTaxonomy.queryInfo(q).protein;return p&&p.species===draft.species&&!p.form;});
+      // Preserve the planned plain protein rather than allowing a selected
+      // prepared SKU to redefine the original ingredient lookup.
+      return draft?.form&&intended?{...entry,catalogQuery:intended}:entry;
+    });
     let recipeProducts = recipe ? entries.map(entry => recipeInventory.resolve(entry, retrieved)) : [];
     if (recipe && recipeProducts.some(product => !product || product.available !== true)) {
       const matchingSignal = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
@@ -1043,7 +1061,8 @@ async function modelReply(env, model, input, history, lang, priceOnly, signal, p
       const protectedDiet=requirements.qualifiers.length||/allerg|intoleran|حساس|7asasi/i.test(shopperRequests);
       const groups=entries.filter((_,i)=>!recipeProducts[i]).map(entry=>{
         const info=productTaxonomy.queryInfo(entry.catalogQuery||entry.name||'');
-        if(protectedDiet||!info.types.length||info.brands.length||info.qualifiers.length||info.attributes.some(a=>requirements.attributes.includes(a))||info.storage&&info.storage===requirements.storage)return null;
+        const protectedProtein=info.protein&&requirements.protein?.species===info.protein.species&&(info.protein.cut&&info.protein.cut===requirements.protein.cut||info.protein.form&&info.protein.form===requirements.protein.form||info.protein.boneless&&requirements.protein.boneless);
+        if(protectedDiet||protectedProtein||!info.types.length||info.brands.length||info.qualifiers.length||info.attributes.some(a=>requirements.attributes.includes(a))||info.storage&&info.storage===requirements.storage)return null;
         const choices=recipeInventory.candidates({name:info.types[0],catalogQuery:info.types[0]},8).filter(p=>p.available===true).slice(0,4);
         return choices.length?{ingredient:entry.name,requiredFamily:info.types[0],choices:choices.map(promptProduct)}:null;
       }).filter(Boolean);
@@ -1170,7 +1189,7 @@ async function resolveChat(input, body, env, requestSignal, publish) {
   const listing=contextualListingReply(input,history,lang);
   if(listing)return presentReply(listing,canUseModel?'ai':'demo',lang);
   if (!canUseModel) return presentReply(demo(), 'demo', lang);
-  const literal=literalProductReply(input,lang);
+  const literal=literalProductReply(input,lang,history);
   if(literal)return presentReply(literal,'ai',lang);
   let scopeAllowed = false;
   try {

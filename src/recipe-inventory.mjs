@@ -76,6 +76,17 @@ export function createRecipeInventory(products, baseSearch, normalize) {
   const stem = word => word.length > 3 && !word.endsWith('ss') ? word.replace(/ies$/, 'y').replace(/s$/, '') : word;
   const tokens = value => normalize(value).split(' ').filter(Boolean).map(stem);
   const queryFor = entry => String(entry.catalogQuery || entry.name || '').trim().slice(0, 120);
+  function proteinIntent(entry) {
+    const lookup=taxonomy.queryInfo(queryFor(entry)).protein;
+    if(!lookup)return null;
+    const named=taxonomy.queryInfo(entry.name||'').protein;
+    // A model-selected processed SKU name is not an ingredient requirement.
+    // The canonical ingredient lookup is authoritative; a plain named cut
+    // can refine it, but must not turn raw chicken into escalope or nuggets.
+    const cut=lookup.cut||(!lookup.form&&named?.species===lookup.species&&!named.form?named.cut:null);
+    return {...lookup,cut:cut||(!lookup.form&&lookup.species==='chicken'?'breast':null),raw:lookup.raw||!lookup.form,
+      boneless:lookup.boneless||Boolean(!lookup.form&&named?.species===lookup.species&&!named.form&&named.boneless)};
+  }
   const requirements = [
     [/gluten free|sans gluten/, /gluten\s*free|sans gluten/],
     [/lactose free|sans lactose/, /lactose\s*free|sans lactose/],
@@ -91,11 +102,15 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const profile = profileFor(query) || profileFor(entry.name || '');
     if (!taxonomy.compatible(query,product)) return false;
     const localized = taxonomy.queryInfo(entry.name || '');
-    if (localized.types.length && !taxonomy.compatible(localized,product)) return false;
+    const protein=proteinIntent(entry);
+    const meta=taxonomy.records.get(product.id);
+    if(protein){
+      if(meta?.protein?.bundle||!taxonomy.compatible({ ...taxonomy.queryInfo(query),protein },product))return false;
+    }else if (localized.types.length && !taxonomy.compatible(localized,product)) return false;
     if (profile && !profile.accepts(product)) return false;
-    if (taxonomy.queryInfo(query).types.some(type=>['chicken','beef','lamb'].includes(type))) {
+    if (!protein&&taxonomy.queryInfo(query).types.some(type=>['chicken','beef','lamb'].includes(type))) {
       if (/cold cuts/i.test(product.subcategory||'') && !/cold cut|smoked|mortad|sausage/.test(requested)) return false;
-      for (const form of ['breaded','crispy','crunchy','marinated','fajita','sauce','soudjouk','nugget','burger']) {
+      for (const form of ['escalope','escallop','breaded','crispy','crunchy','marinated','fajita','sauce','soudjouk','nugget','burger']) {
         if (name.includes(form) && !requested.includes(form)) return false;
       }
     }
@@ -116,9 +131,10 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const key = normalize(query + '|' + (entry.name || ''));
     if (candidateCache.has(key)) return candidateCache.get(key).slice(0, limit);
     const profile = profileFor(query) || profileFor(entry.name || '');
+    const protein=proteinIntent(entry);
     const clean = normalize(query).replace(/\b(?:finely|roughly|chopped|diced|sliced|peeled|grated|minced|to taste|for garnish|freshly)\b/g, ' ').replace(/ +/g, ' ').trim();
     const words = clean.split(' ').filter(word => word.length > 2 && !['and', 'the', 'with', 'for'].includes(word));
-    const searches = profile ? [profile.terms[0]] : [...new Set([query, clean, words.slice(-2).join(' '), ...words])].filter(Boolean).slice(0, 8);
+    const searches = protein ? [query,...(protein.metadataOnly||protein.unsupported?[protein.species]:[])] : profile ? [profile.terms[0]] : [...new Set([query, clean, words.slice(-2).join(' '), ...words])].filter(Boolean).slice(0, 8);
     const pool = [...new Map(searches.flatMap(term => search(term)).map(product => [product.id, product])).values()];
     const requested = tokens(query);
     const ranked = pool.filter(product => eligible(entry, product)).map(product => {
@@ -127,7 +143,7 @@ export function createRecipeInventory(products, baseSearch, normalize) {
       const plain = ['produce', 'dairy', 'meat', 'fish', 'pantry', 'bakery'].some(key => category(product, key));
       const meta = taxonomy.records.get(product.id), info = taxonomy.queryInfo(query);
       return { product, score: overlap * 10 + Number(overlap === requested.length) * 15 + Number(plain) * 8 + Number(product.available === true) * 20 + Number(info.types.includes(meta.productType))*50 + info.attributes.filter(a=>meta.attributes.includes(a)).length*15 };
-    }).sort((a, b) => b.score - a.score || a.product.name.en.localeCompare(b.product.name.en)).map(({ product }) => product);
+    }).sort((a, b) => (protein?Number(b.product.available===true)-Number(a.product.available===true):0)||b.score - a.score || a.product.name.en.localeCompare(b.product.name.en)).map(({ product }) => product);
     if(candidateCache.size>=512)candidateCache.delete(candidateCache.keys().next().value);
     candidateCache.set(key, ranked);
     return ranked.slice(0, limit);
@@ -148,9 +164,11 @@ export function createRecipeInventory(products, baseSearch, normalize) {
     const existing = allowedIds.has(entry.id) ? byId.get(entry.id) : null;
     const query = typeof entry.catalogQuery === 'string' && entry.catalogQuery.trim() ? entry.catalogQuery.trim() : entry.name || '';
     const profile = profileFor(query) || profileFor(entry.name || '');
+    const protein=proteinIntent(entry);
     // Keep exact, valid choices. Replace a sold-out generic choice only with the same ingredient type.
-    if (existing && eligible(entry, existing) && (existing.available === true || !profile)) return existing;
+    if (existing && eligible(entry, existing) && (existing.available === true || !profile&&!protein)) return existing;
     const matches = profile ? search(profile.terms[0]).filter(product => eligible(entry, product)) : candidates(entry, 30);
+    if(protein)return matches.find(p=>p.available===true)||(existing&&eligible(entry,existing)?existing:matches[0])||null;
     if (!profile) {
       const exact = matches.find(product => normalize(product.name.en) === normalize(query) || product.id === query || product.sku === query);
       // Full ingredient phrases may occur within branded names or in a different word order.

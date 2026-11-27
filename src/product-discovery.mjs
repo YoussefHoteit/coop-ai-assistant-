@@ -37,7 +37,7 @@ export function createProductDiscovery(taxonomy, normalize, categoryLabels) {
       r(['Beef','لحم بقر','La7me ba2ar','Bœuf'],/\b(?:beef|cow|boeuf|biftek|faux fillet|entrecote)\b/,'beef meat|cow meat|beef cuts|ba2ar|la7me ba2ar|boeuf|بقر|لحمة بقر',null,rawMeat),
       r(['Lamb and sheep meat','لحم غنم','La7me ghanam','Agneau et mouton'],/\b(?:lamb|sheep|mutton|agneau|mouton)\b/,'lamb|sheep|sheep meat|mutton|agneau|ghanam|غنم|لحمة غنم',null,rawMeat),
       {key:'chicken',labels:['Chicken','دجاج','Djej','Poulet'],aliases:['poultry','poulet','djej','jaj','فروج','دجاج','chicken meat'],matches:(p,m)=>rawMeat(p,m)&&(m.aisles.includes('Chicken')||/\b(?:chicken|poulet|poule|tawook)\b/.test(norm(p.name.en)))},
-      {key:'turkey',labels:['Turkey cold cuts','حبش مقطّع','7abash m2atta3','Dinde en charcuterie'],aliases:['turkey','dinde','turkey breast','7abash','حبش'],matches:(p,m)=>m.aisles.includes('Cold Cuts')&&/\b(?:turkey|dinde)\b/.test(norm(p.name.en))},
+      {key:'turkey',labels:['Turkey cold cuts','حبش مقطّع','7abash m2atta3','Dinde en charcuterie'],aliases:['turkey','dinde','turkey breast','7abash','حبش'],matches:(p,m)=>m.aisles.includes('Cold Cuts')&&taxonomy.matchesType(m,'turkey')},
       {key:'cold cuts',labels:['Cold cuts and deli meats','لحوم باردة ومرتديلا','Lou7oum berde w mortadella','Charcuterie et viandes froides'],aliases:['cold cuts','deli meat','deli meats','mortadella','charcuterie','مرتديلا','لحوم باردة'],matches:(p,m)=>m.aisles.includes('Cold Cuts')},
       r(['Burgers and kofta','برغر وكفتة','Burger w kafta','Burgers et kefta'],/\b(?:burger|kofta|kafta)\b/,'burgers|burger|kofta|kafta'),
     ],
@@ -102,6 +102,37 @@ export function createProductDiscovery(taxonomy, normalize, categoryLabels) {
   };
   const cleanLabel=value=>String(value).replace(/\s+/g,' ').trim();
   const title=value=>value.replace(/(^|\s)\p{L}/gu,c=>c.toUpperCase());
+  // Build a product-type hierarchy from verified species, cut and preparation.
+  // This works for any classified protein, not a particular dish or SKU.
+  function proteinGroups(species){
+    const group=(key,labels,aliases,matches)=>({key,labels,aliases:aliases.split('|').filter(alias=>species==='chicken'||!/chicken|دجاج|djej|poulet/i.test(alias)),matches:(p,m)=>m.protein?.species===species&&matches(m.protein)});
+    const plain=m=>m.preparation==='raw'&&!m.bundle;
+    const isChicken=species==='chicken';
+    return [
+      group('raw',isChicken?['Raw chicken','دجاج نيء','Djej nay','Poulet cru']:['Raw cuts','قطع نيئة','2ota3 nayye','Morceaux crus'],'raw|raw chicken|raw chicken cuts|raw cuts|fresh chicken|plain chicken|دجاج نيء|djej nay|poulet cru',m=>plain(m)&&m.cut!=='offal'),
+      group('whole-bird',isChicken?['Whole chicken','فروج كامل','Farrouj kemel','Poulet entier']:['Whole birds','طيور كاملة','Tyur kemle','Volailles entières'],'whole chicken|whole bird|whole birds|entire chicken|فروج كامل|farrouj kemel|poulet entier',m=>plain(m)&&m.cut==='whole-bird'),
+      group('breast',['Raw breast / fillet','صدر / فيليه نيء','Sader / fillet nay','Filet / blanc cru'],'breast|fillet|fillets|whole fillet|chicken breast|chicken fillet|raw chicken breast|boneless chicken breast|صدر|مسحب|sader|filet',m=>plain(m)&&m.cut==='breast'),
+      group('fillet',['Raw fillets','فيليه نيء','Fillet nay','Filets crus'],'fillet|fillets|raw fillet|filet|فيليه',m=>plain(m)&&m.cut==='fillet'),
+      group('leg',['Raw legs','أفخاذ نيئة','Fkhad nayye','Cuisses crues'],'leg|legs|whole legs|chicken legs|raw chicken legs|فخاد|fkhad|cuisses',m=>plain(m)&&m.cut==='leg'),
+      group('thigh',['Raw thighs','أوراك نيئة','Warak naye','Hauts de cuisse crus'],'thigh|thighs|chicken thighs',m=>plain(m)&&m.cut==='thigh'),
+      group('wing',['Raw wings','جوانح نيئة','Jwane7 nayye','Ailes crues'],'wing|wings|whole wings|chicken wings|جوانح|jwane7|ailes',m=>plain(m)&&m.cut==='wing'),
+      group('drumstick',['Raw drumsticks','دبابيس نيئة','Dabebis naye','Pilons crus'],'drumstick|drumsticks|pilons',m=>plain(m)&&m.cut==='drumstick'),
+      group('minced',['Minced meat','لحم مفروم','La7me mafroume','Viande hachée'],'minced|ground|minced meat|ground meat',m=>plain(m)&&m.cut==='minced'),
+      group('offal',['Liver and offal','كبدة وأحشاء','Sawda w a7sha','Foie et abats'],'liver|chicken liver|offal|سودة|كبدة|foie',m=>plain(m)&&m.cut==='offal'),
+      group('marinated',['Marinated and seasoned','متبل ومتبهر','Mtabbal w mbahhar','Mariné et assaisonné'],'marinated|seasoned|tawook|fajita|متبل|mtabbal',m=>m.form==='marinated'),
+      group('escalope',['Escalope','إسكالوب','Escalope','Escalopes'],'escalope|escalopes|chicken escalope|اسكالوب',m=>m.form==='escalope'),
+      group('breaded',['Breaded and crispy','مغلف بالبقسماط ومقرمش','Breaded w crispy','Pané et croustillant'],'breaded|crispy|crispy chicken|zinger|كرسبي',m=>m.form==='breaded'),
+      group('nuggets',['Nuggets','ناغتس','Nuggets','Nuggets'],'nuggets|chicken nuggets|ناغتس',m=>m.form==='nuggets'),
+      group('burger',['Burgers','برغر','Burger','Burgers'],'burger|burgers|chicken burger|برغر',m=>m.form==='burger'),
+      group('cordon-bleu',['Cordon bleu','كوردون بلو','Cordon bleu','Cordon bleu'],'cordon bleu',m=>m.form==='cordon-bleu'),
+      group('tender-strip',['Tenders and strips','تندرز وشرائح','Tenders w strips','Aiguillettes et lamelles'],'tenders|tender|strips|chicken tenders|chicken strips',m=>m.form==='tender-strip'),
+      group('cold-cut',['Cold cuts and luncheon meat','لحوم باردة ومرتديلا','Lou7oum berde w mortadella','Charcuterie et mortadelle'],'cold cuts|luncheon|mortadella|charcuterie|مرتديلا',m=>m.form==='cold-cut'),
+      group('smoked',['Smoked products','منتجات مدخنة','Products mdakhkhan','Produits fumés'],'smoked|smoked meat|smoked salmon|مدخن|fumé',m=>m.form==='smoked'),
+      group('sausage',['Sausages and hot dogs','نقانق وهوت دوغ','Sausage w hot dog','Saucisses et hot-dogs'],'sausages|sausage|hot dogs|hot dog|soudjouk|نقانق',m=>m.form==='sausage'),
+      group('canned',['Canned meat','لحوم معلبة','La7me m3allabe','Viande en conserve'],'canned|canned chicken|canned meat',m=>m.form==='canned'),
+      group('prepared',['Other prepared products','منتجات محضرة أخرى','Products m7addara tenye','Autres produits préparés'],'prepared|prepared chicken|other prepared',m=>m.form==='prepared'),
+    ];
+  }
   function discover(query,products){
     const available=products.filter(p=>p.available===true);
     if(!available.length)return [];
@@ -110,13 +141,18 @@ export function createProductDiscovery(taxonomy, normalize, categoryLabels) {
     const family=rules[parent]?parent:info.types.find(t=>rules[t])||parent;
     const withProducts=rule=>({...rule,products:available.filter(p=>rule.matches(p,taxonomy.records.get(p.id)))});
     let groups=(rules[family]||[]).map(withProducts).filter(g=>g.products.length&&g.products.length<available.length);
+    if(!groups.length&&info.protein)groups=proteinGroups(info.protein.species).map(withProducts).filter(g=>g.products.length&&g.products.length<available.length);
+    // A narrow product family should offer its meaningful varieties, not merely
+    // broader departments that happen to contain them. Source aisles remain a
+    // useful first-level hierarchy for broad department requests.
+    if(!groups.length&&info.types.length)groups=generic.map(withProducts).filter(g=>g.products.length&&g.products.length<available.length);
     // The same algorithm works for every inventory aisle: first show named
     // subcategories and verified distinct product types, then measurable forms.
     if(!groups.length){
       const aisles=new Map();
       const department=Object.entries(categoryLabels).find(([key,labels])=>[key,...labels].some(label=>norm(label)===parent))?.[0];
       const primary=department?new Set(available.filter(p=>p.category===department).flatMap(p=>taxonomy.records.get(p.id).aisles)):null;
-      for(const p of available)for(const label of taxonomy.records.get(p.id).aisles){const key=norm(label);if(key===parent||/offer|promotion|organic grocer|^drinks$/.test(key)||primary?.size&&!primary.has(label))continue;if(!aisles.has(key))aisles.set(key,{label,ids:new Set()});aisles.get(key).ids.add(p.id);}
+      for(const p of available)for(const label of taxonomy.records.get(p.id).aisles){const key=norm(label);if(key===parent||info.types.length&&(' '+key+' ').includes(' '+parent+' ')||/offer|promotion|organic grocer|^drinks$/.test(key)||primary?.size&&!primary.has(label))continue;if(!aisles.has(key))aisles.set(key,{label,ids:new Set()});aisles.get(key).ids.add(p.id);}
       const distinct=[...aisles].filter(([,v])=>v.ids.size>0&&v.ids.size<available.length);
       if(distinct.length>1)groups=distinct.map(([key,v])=>({key:'aisle '+key,labels:[v.label,...(aisleTranslations[v.label]||[v.label,v.label,v.label])],aliases:[v.label],products:available.filter(p=>v.ids.has(p.id))}));
     }
